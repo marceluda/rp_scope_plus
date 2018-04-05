@@ -1,0 +1,24 @@
+
+import document
+
+document.getElementById('gen_ch1_ampl').value=0.3
+
+print(document.getElementById('gen_ch1_ampl').value)
+
+
+
+
+
+import matplotlib
+
+matplotlib.pyplot.plot([0,1,2],[1,3,0])
+
+
+
+
+import RP
+
+print  RP.params()['meas_min_ch1']
+
+
+

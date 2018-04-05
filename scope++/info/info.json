@@ -1,0 +1,6 @@
+{
+    "name": "Oscilloscope++",
+    "version": "1.1.0-BUILD_NUMBER",
+    "revision": "REVISION",
+    "description": "A two channel waveform generator with integrated two channel time domain signal visualization system and four PID controls."
+}

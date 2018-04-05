@@ -1,3 +1,17 @@
+# Auxiliar folders #
+####################
+_save/
+scope++/fpga/project/
+scope++/src/old/
+_settings.env
+_build_number
+scope++/target/
+scope++/target_dbg/
+scope++/target_rld/
+scope++/fpga/out/
+scope++/.srcs/
+
+
 # Prerequisites
 *.d
 
