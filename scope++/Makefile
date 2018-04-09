@@ -36,8 +36,7 @@ target/$(APP): $(CONTROLLERHF) index.html
 	mkdir -p target/$(APP)
 	#cp -r $(CONTROLLERHF) fpga.conf info css js red_pitaya.bit index.html target/$(APP)
 	cp -r $(CONTROLLERHF) fpga.conf info css js index.html target/$(APP)
-	rm target/$(APP)/info/icon_*.png
-	cp -r upload_app.sh target/
+	# cp -r upload_app.sh target/
 	cp -r ../resources target/
 	cp ../CHANGELOG.md ../README.md target/
 	mkdir -p target/$(APP)/py

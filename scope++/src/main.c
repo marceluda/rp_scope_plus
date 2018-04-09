@@ -4,7 +4,7 @@
  * @brief Red Pitaya Oscilloscope main module.
  *
  * @Author Jure Menart <juremenart@gmail.com>
- *         
+ *
  * (c) Red Pitaya  http://www.redpitaya.com
  *
  * This part of code is written in C programming language.
@@ -32,10 +32,10 @@
 /* Describe app. parameters with some info/limitations */
 pthread_mutex_t rp_main_params_mutex = PTHREAD_MUTEX_INITIALIZER;
 static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
-    { /* min_gui_time   */ 
+    { /* min_gui_time   */
         //"xmin", -1000000, 1, 0, -10000000, +10000000 },
         "xmin", 0, 1, 0, -10000000, +10000000 },
-    { /* max_gui_time   */ 
+    { /* max_gui_time   */
         //"xmax", +1000000, 1, 0, -10000000, +10000000 },
         "xmax", 131, 1, 0, -10000000, +10000000 },
     { /* trig_mode:
@@ -57,7 +57,7 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
     { /* trig_level : Trigger level, expressed in normalized 1V  */
         "trig_level", 0, 1, 0,     -2,     +2 },
     { /* single_button:
-       *    0 - ignore 
+       *    0 - ignore
        *    1 - trigger */
         "single_btn", 0, 1, 0,         0,         1 },
     { /* time_range:
@@ -78,7 +78,7 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
            *    0 - disable
            *    1 - enable */
         "en_avg_at_dec", 0, 1, 0,      0,         1 },
-    { /* auto_flag: 
+    { /* auto_flag:
        * Puts the controller to auto mode - the algorithm which detects input
        * signal and changes the parameters to most fit the input:
        *    0 - normal operation
@@ -90,12 +90,12 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
     { /* min_y, max_y - Controller defined Y range when using auto-set or after
        * gain change y range */
         "max_y", 0, 0, 0, -1000, +1000 },
-    { /* forcex_flag: 
+    { /* forcex_flag:
        * Server sets this flag when X axis time units change
-       * Client checks this flag, when set the server's xmin:xmax define the visualization range 
+       * Client checks this flag, when set the server's xmin:xmax define the visualization range
        *    0 - normal operation
        *    1 - Server forces xmin, xmax  */
-        "forcex_flag", 0, 0, 0, 0, 1 },	
+        "forcex_flag", 0, 0, 0, 0, 1 },
       /* Measurement parameters for both channels. All are read-only and they
        * are calculated on FPGA buffer (non decimated in SW):
        * min, max [V] - minimum and maximum value in the buffer (non-decimated)
@@ -137,10 +137,10 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
        * client.
        */
         "gui_reset_y_range", 28, 0, 1, 0, 2000 },
-    { /* gen_DC_offs_1 - DC offset for channel 1 expressed in [V] requested by 
+    { /* gen_DC_offs_1 - DC offset for channel 1 expressed in [V] requested by
        * GUI */
         "gen_DC_offs_1", 0, 1, 0, -100, 100 },
-    { /* gen_DC_offs_2 - DC offset for channel 2 expressed in [V] requested by 
+    { /* gen_DC_offs_2 - DC offset for channel 2 expressed in [V] requested by
        * GUI */
         "gen_DC_offs_2", 0, 1, 0, -100, 100 },
     { /* gui_xmin - Xmin as specified by GUI - not rounded to sampling engine quanta. */
@@ -166,7 +166,7 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
 
     { /* gen_trig_mod_ch1 - Selects the trigger mode for channel 1:
        *    0 - continuous
-       *    1 - single 
+       *    1 - single
        *    2 - external */
         "gen_trig_mod_ch1", 0, 1, 0, 0, 2 },
     { /* gen_sig_type_ch1 - Selects the type of signal for channel 1:
@@ -191,7 +191,7 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
         "gen_sig_dcoff_ch1", 0, 1, 0, -1, 1 },
     { /* gen_trig_mod_ch2 - Selects the trigger mode for channel 2:
        *    0 - continuous
-       *    1 - single 
+       *    1 - single
        *    2 - external */
         "gen_trig_mod_ch2", 0, 1, 0, 0, 2 },
     { /* gen_sig_type_ch2 - Selects the type of signal for channel 2:
@@ -292,9 +292,10 @@ static rp_app_params_t rp_main_params[PARAMS_NUM+1] = {
         "pid_22_ki",  0, 1, 0, -8192, 8191 },
     { /* pid_NN_kd - PID NN derivative gain   Kd in [ADC] counts. */
         "pid_22_kd",  0, 1, 0, -8192, 8191 },
-
+    { /* raw_mode */
+        "raw_mode",  0, 0, 0, 0, 1 },
     { /* Must be last! */
-        NULL, 0.0, -1, -1, 0.0, 0.0 }     
+        NULL, 0.0, -1, -1, 0.0, 0.0 }
 };
 /* params initialized */
 static int params_init = 0;
@@ -325,7 +326,7 @@ int rp_app_init(void)
         fprintf(stderr, "rp_read_calib_params() failed, using default"
                 " parameters\n");
     }
-    if(rp_osc_worker_init(&rp_main_params[0], PARAMS_NUM, 
+    if(rp_osc_worker_init(&rp_main_params[0], PARAMS_NUM,
                           &rp_main_calib_params) < 0) {
         return -1;
     }
@@ -356,7 +357,7 @@ int rp_app_exit(void)
 int time_range_to_time_unit(int range)
 {
     int unit = 2;
-    
+
     switch (range) {
     case 0:
     case 1:
@@ -615,7 +616,7 @@ int rp_set_params(rp_app_params_t *p, int len)
     int params_change = 0;
     int awg_params_change = 0;
     int pid_params_change = 0;
-    
+
     TRACE("%s()\n", __FUNCTION__);
 
     if(len > PARAMS_NUM) {
@@ -651,7 +652,7 @@ int rp_set_params(rp_app_params_t *p, int len)
             continue;
 
         if(rp_main_params[p_idx].value != p[i].value) {
-            if(p_idx < PARAMS_AWG_PARAMS) 
+            if(p_idx < PARAMS_AWG_PARAMS)
                 params_change = 1;
             if ( (p_idx >= PARAMS_AWG_PARAMS) && (p_idx < PARAMS_PID_PARAMS) )
                 awg_params_change = 1;
@@ -673,7 +674,7 @@ int rp_set_params(rp_app_params_t *p, int len)
     }
     transform_from_iface_units(&rp_main_params[0]);
     pthread_mutex_unlock(&rp_main_params_mutex);
-    
+
 
     /* Set parameters in HW/FPGA only if they have changed */
     if(params_change || (params_init == 0)) {
@@ -697,8 +698,8 @@ int rp_set_params(rp_app_params_t *p, int len)
         float t_unit_factor = 1; /* to convert to seconds */
 
         /* Our time window with current settings:
-         *   - time_delay is added later, when we check if it is correct 
-         *     setting 
+         *   - time_delay is added later, when we check if it is correct
+         *     setting
          */
         float t_min = 0;
         float t_max = ((OSC_FPGA_SIG_LEN-1) * smpl_period);
@@ -720,18 +721,18 @@ int rp_set_params(rp_app_params_t *p, int len)
             rp_osc_clean_signals();
             rp_osc_worker_change_state(rp_osc_auto_set_state);
             /* AUTO_FLAG_PARAM is cleared when Auto-set algorithm finishes */
-            
+
             /* Wait for auto-set algorithm to finish or timeout */
             int timeout = 10000000; // [us]
             const int step = 50000; // [us]
             rp_osc_worker_state_t state;
             while (timeout > 0) {
-         
+
                 rp_osc_worker_get_state(&state);
                 if (state != rp_osc_auto_set_state) {
                     break;
                 }
-                
+
                 usleep(step);
                 timeout -= step;
             }
@@ -746,7 +747,7 @@ int rp_set_params(rp_app_params_t *p, int len)
         }
 
         /* If AUTO trigger mode, reset trigger delay */
-        if(mode == 0) 
+        if(mode == 0)
             t_delay = 0;
 
         if(dec_factor < 0) {
@@ -791,7 +792,7 @@ int rp_set_params(rp_app_params_t *p, int len)
          * time window is defined from:
          *  ([ 0 - 16k ] * smpl_period) + trig_delay */
         /* round to correct/possible values - convert to nearest index
-         * and back 
+         * and back
          */
         t_start_idx = round(t_start / smpl_period);
         t_stop_idx  = round(t_stop / smpl_period);
@@ -799,7 +800,7 @@ int rp_set_params(rp_app_params_t *p, int len)
         t_start = (t_start_idx * smpl_period);
         t_stop  = (t_stop_idx * smpl_period);
 
-        if(t_start < t_min) 
+        if(t_start < t_min)
             t_start = t_min;
         if(t_stop > t_max)
             t_stop = t_max;
@@ -828,7 +829,7 @@ int rp_set_params(rp_app_params_t *p, int len)
         rp_main_params[MIN_GUI_PARAM].value = t_start;
         rp_main_params[MAX_GUI_PARAM].value = t_stop;
 
-        rp_osc_worker_update_params((rp_app_params_t *)&rp_main_params[0], 
+        rp_osc_worker_update_params((rp_app_params_t *)&rp_main_params[0],
                                     fpga_update);
 
         /* check if we need to change state */
@@ -860,10 +861,10 @@ int rp_set_params(rp_app_params_t *p, int len)
     if(awg_params_change) {
 
         /* Correct frequencies if needed */
-        rp_main_params[GEN_SIG_FREQ_CH1].value = 
+        rp_main_params[GEN_SIG_FREQ_CH1].value =
             rp_gen_limit_freq(rp_main_params[GEN_SIG_FREQ_CH1].value,
                               rp_main_params[GEN_SIG_TYPE_CH1].value);
-        rp_main_params[GEN_SIG_FREQ_CH2].value = 
+        rp_main_params[GEN_SIG_FREQ_CH2].value =
             rp_gen_limit_freq(rp_main_params[GEN_SIG_FREQ_CH2].value,
                               rp_main_params[GEN_SIG_TYPE_CH2].value);
         if(generate_update(&rp_main_params[0]) < 0) {
@@ -894,7 +895,7 @@ int rp_get_params(rp_app_params_t **p)
     for(i = 0; i < PARAMS_NUM; i++) {
         int p_strlen = strlen(rp_main_params[i].name);
         p_copy[i].name = (char *)malloc(p_strlen+1);
-        strncpy((char *)&p_copy[i].name[0], &rp_main_params[i].name[0], 
+        strncpy((char *)&p_copy[i].name[0], &rp_main_params[i].name[0],
                 p_strlen);
         p_copy[i].name[p_strlen]='\0';
 
@@ -1056,7 +1057,7 @@ int rp_copy_params(rp_app_params_t *src, rp_app_params_t **dst)
             p_new[i].value = src[i].value;
             i++;
         }
-        
+
     }
 
     *dst = p_new;

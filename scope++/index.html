@@ -2,9 +2,8 @@
  *
  * Red Pitaya Oscilloscope++ client.
  *
- * Author: Dakus <info@eskala.eu>
- *         
- * (c) Red Pitaya  http://www.redpitaya.com
+ * Author of original code: Dakus <info@eskala.eu>
+ * Author of modifications: marceluda <marceluda@gmail.com>
  *
  * This part of code is written in Javascript & HTML.
  * Please visit http://en.wikipedia.org/wiki/JavaScript
@@ -26,78 +25,29 @@
   <script src="../assets/flot/jquery.flot.navigate.js"></script>
   <script src="../assets/flot/jquery.flot.resize.min.js"></script>
   <script src="../assets/flot/jquery.flot.touch.js?2"></script>
-  
+
   <link rel="stylesheet" href="css/bootstrap.css" type="text/css">
   <link rel="stylesheet" href="css/style.css"     type="text/css">
-  
-  <!--script src="js/deps/d3.min.js" type="text/javascript"></script> 
-  <script src="js/deps/math.js" type="text/javascript"></script> 
-  <!--script src="js/deps/jquery.js" type="text/javascript"></script--> 
-  
-  <script src="js/skulpt.min.js" type="text/javascript"></script> 
-  <script src="js/skulpt-stdlib.js" type="text/javascript"></script> 
-  
-  
-  
-  <script type="text/javascript"> 
-    // output functions are configurable.  This one just appends some text
-    // to a pre element.
-    function outf(text) { 
-        //var mypre = document.getElementById("output"); 
-        //mypre.innerHTML = mypre.innerHTML + text; 
-        var txt=$('#output').text();
-        $('#output').text(txt+text);
-        
-    } 
-    function builtinRead(x) {
-        if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
-                throw "File not found: '" + x + "'";
-        return Sk.builtinFiles["files"][x];
-    }
-    // Here's everything you need to run a python program in skulpt
-    // grab the code from your textarea
-    // get a reference to your pre element for output
-    // configure the output function
-    // call Sk.importMainWithBody()
-    function runit() { 
-       var prog = document.getElementById("yourcode").value; 
-       var mypre = document.getElementById("output"); 
-       mypre.innerHTML = ''; 
-       Sk.pre = "output";
-       Sk.configure({output:outf, read:builtinRead}); 
-       (Sk.TurtleGraphics || (Sk.TurtleGraphics = {})).target = 'mycanvas';
-       
-       var myPromise = Sk.misceval.asyncToPromise(function() {
-           return Sk.importMainWithBody("<stdin>", false, prog, true);
-       });
-       myPromise.then(function(mod) {
-           console.log('success');
-       },
-           function(err) {
-           console.log(err.toString());
-       });
-    } 
-  </script> 
 
-  
-  
+
   <script type="text/javascript">
-  
+
   // Settings which can be modified
-   
-  var app_id = 'scope++';  
+
+  var app_id = 'scope++';
   var root_url = '';
   //var root_url = 'http://10.0.1.221';      // Test local
   //var root_url = 'http://192.168.53.133';  // Test remote and local
   //var root_url = 'http://192.168.1.100';   // Default RedPitaya IP
+  var app_version = 'VERSION';
   var start_app_url = root_url + '/bazaar?start=' + app_id;
   var stop_app_url = root_url + '/bazaar?stop=';
   var get_url = root_url + '/data';
   var post_url = root_url + '/data';
   var upload_url = root_url + '/upload_gen_ch';  // The channel number is added automatically
-  
+
   var update_interval = 50;              // Update interval for PC, milliseconds
-  var update_interval_mobdev = 500;      // Update interval for mobile devices, milliseconds 
+  var update_interval_mobdev = 500;      // Update interval for mobile devices, milliseconds
   var request_timeout = 3000;            // Milliseconds
   var long_timeout = 20000;              // Milliseconds
   var meas_panel_dec = 5;                // Decimation for numerical measure panel to make it human readable
@@ -106,16 +56,16 @@
   var xdecimal_places = 2;               // Number of decimal places for the xmin/xmax values. Maximum supported are 12.
   var trigger_level_xdecimal_places = 4; // Number of decimal places for trigger level tooltip
   var range_offset = 1;                  // Percentages
-  
+
   var sendParamsCount=0;
   var updateGraphDataCount=0;
-  
+
   var xmin = -1000000;
-  var xmax = 1000000;  
+  var xmax = 1000000;
 
   var time_range_max = [130, 1000, 8, 130, 1, 8];
   var range_steps = [0.5, 1, 2, 5, 10, 20, 50, 100];
-  
+
   var plot_options = {
     colors: ['#3276B1', '#D2322D', '#009900'],    // channel1, channel2, trigger line
     lines: { lineWidth: 1 },
@@ -126,9 +76,9 @@
     legend: { noColumns: 2, margin: [0, 0], backgroundColor: 'transparent' },
     touch: { autoWidth: false, autoHeight: false }
   };
-  
+
   // Settings which should not be modified
-  
+
   var update_timer = null;
   var zoompan_timer = null;
   var downloading = false;
@@ -149,17 +99,45 @@
     original: null,
     local: null
   };
-  
-  // Default parameters - posted after server side app is started 
+
+// IMPORTED FROM LOCK-IN+PID ---------------------------------------------------
+
+
+set_trigger_val=false;
+trigger_just_set=false;
+last_disp_units=false;
+lasttsp=Math.floor((new Date().getTime())/1000);
+
+// List of params to save/load
+config_params_txts =  'en_avg_at_dec,forcex_flag,gain_ch1,gain_ch2,gen_DC_norm_1,gen_DC_norm_2,gen_DC_offs_1,'+
+                      'gen_DC_offs_2,gen_awg_refresh,gen_enable_ch1,gen_enable_ch2,gen_sig_amp_ch1,gen_sig_amp_ch2,'+
+                      'gen_sig_dcoff_ch1,gen_sig_dcoff_ch2,gen_sig_freq_ch1,gen_sig_freq_ch2,gen_sig_type_ch1,'+
+                      'gen_sig_type_ch2,gen_single_ch1,gen_single_ch2,gen_trig_mod_ch1,gen_trig_mod_ch2,gui_reset_y_range,'+
+                      'gui_xmax,gui_xmin,max_y,max_y_norm,meas_amp_ch1,meas_amp_ch2,meas_avg_ch1,meas_avg_ch2,meas_freq_ch1,'+
+                      'meas_freq_ch2,meas_max_ch1,meas_max_ch2,meas_min_ch1,meas_min_ch2,meas_per_ch1,meas_per_ch2,min_y,'+
+                      'min_y_norm,pid_11_enable,pid_11_kd,pid_11_ki,pid_11_kp,pid_11_rst,pid_11_sp,pid_12_enable,'+
+                      'pid_12_kd,pid_12_ki,pid_12_kp,pid_12_rst,pid_12_sp,pid_21_enable,pid_21_kd,pid_21_ki,pid_21_kp,'+
+                      'pid_21_rst,pid_21_sp,pid_22_enable,pid_22_kd,pid_22_ki,pid_22_kp,pid_22_rst,pid_22_sp,prb_att_ch1,'+
+                      'prb_att_ch2,scale_ch1,scale_ch2,single_btn,time_range,time_units,trig_delay,'+
+                      'trig_edge,trig_level,trig_mode,trig_source,xmax,xmin,raw_mode';
+
+config_params_keys = config_params_txts.split(",");
+
+text_param_editor='';
+
+// END OF IMPORTED FROM LOCK-IN+PID ----------------------------------------------
+
+
+  // Default parameters - posted after server side app is started
   var def_params = {
     en_avg_at_dec: 0
-  }; 
-    
+  };
+
   // On page loaded
-  
+
   $(function() {
-    
-    // Show different buttons on touch screens    
+
+    // Show different buttons on touch screens
     if(window.ontouchstart === undefined) {
       $('.btn-lg').removeClass('btn-lg');
       $('#accordion .btn, .modal .btn').addClass('btn-sm');
@@ -172,23 +150,23 @@
       $('#btn_zoomin, #btn_zoomout, #btn_pan').remove();
       $('#btn_zoompan').show();
     }
-    
+
     // Add application ID in the message from modal popup
     $('.app-id').text(app_id);
-    
-    // Disable all controls until the params state is loaded for the first time 
+
+    // Disable all controls until the params state is loaded for the first time
     $('input, select, button', '.container').prop('disabled', true);
-    
+
     // Events binding for trigger controls
-    
+
     $('#trigger_canvas').on({
       'mousedown touchstart': function(evt) {
-      
+
         // Ignore the event if trigger source is External or mode is not Normal
         if(!params.original || params.original.trig_mode != 1 || params.original.trig_source == 2) {
           return;
         }
-      
+
         trig_dragging = true;
         $('input, select', '#accordion').blur();
         mouseDownMove(this, evt);
@@ -205,22 +183,22 @@
       },
       'mouseup mouseout touchend': mouseUpOut
     });
-    
+
     $('input,select', '#accordion').on('focus', function() {
       user_editing = true;
     });
-    
+
     $('#trig_mode').on('change', function() {
       onDropdownChange($(this), 'trig_mode', true);
-      
+
       // Autorun if trigger mode is Auto(0) or Normal(1), stop if it is Single(2).
-      autorun = (params.local.trig_mode == 2 ? 0 : 1); 
+      autorun = (params.local.trig_mode == 2 ? 0 : 1);
       runStop();
     });
-    
+
     $('#trig_source').on('change', function() { onDropdownChange($(this), 'trig_source'); });
     $('#trig_edge').on('change', function() { onDropdownChange($(this), 'trig_edge'); });
-    
+
     $('#trig_level')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -229,7 +207,7 @@
       .on('blur', function() {
         $('#apply_trig_level').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var tlev = parseLocalFloat($(this).val());
         var scale = (params.local.trig_source == 0 ? params.local.scale_ch1 : params.local.scale_ch2);
         if(! isNaN(tlev)) {
@@ -252,24 +230,24 @@
           $(this).blur();
         }
       });
-    
+
     // Events binding for range controls
-    
+
     $('#range_x_minus, #range_x_plus').on('click', function() {
       var nearest = $(this).data('nearest');
-      
+
       if(nearest && plot) {
         var options = plot.getOptions();
         var axes = plot.getAxes();
         var min = (options.xaxes[0].min !== null ? options.xaxes[0].min : axes.xaxis.min);
         var max = (options.xaxes[0].max !== null ? options.xaxes[0].max : axes.xaxis.max);
         var unit = $(this).data('unit');
-        
+
         // Convert nanoseconds to milliseconds.
         if(unit == 'ns') {
           nearest /= 1000;
         }
-        
+
         var center = (min + max) / 2;
         var half = nearest / 2;
         min = center - half;
@@ -280,48 +258,48 @@
 
         plot.setupGrid();
         plot.draw();
-        
+
         params.local.xmin = min;
-        params.local.xmax = max;       
-        
+        params.local.xmax = max;
+
         updateRanges();
         $(this).tooltip($(this).prop('disabled') === true ? 'hide' : 'show');
         sendParams(true);
       }
     });
-    
+
     $('#range_y_minus, #range_y_plus').on('click', function() {
       var nearest = $(this).data('nearest');
-      
+
       if(nearest && plot) {
         var options = plot.getOptions();
         var axes = plot.getAxes();
         var min = (options.yaxes[0].min !== null ? options.yaxes[0].min : axes.yaxis.min);
         var max = (options.yaxes[0].max !== null ? options.yaxes[0].max : axes.yaxis.max);
         var unit = $(this).data('unit');
-        
+
         // Convert millivolts to volts.
         if(unit == 'mV') {
           nearest /= 1000;
         }
-        
+
         var center = (min + max) / 2;
         var half = nearest / 2;
         min = center - half;
         max = center + half;
-        
+
         options.yaxes[0].min = min;
         options.yaxes[0].max = max;
 
         plot.setupGrid();
         plot.draw();
-               
+
         updateRanges();
         $(this).tooltip($(this).prop('disabled') === true ? 'hide' : 'show');
         updateTriggerSlider();
       }
     });
-    
+
     $('#offset_x_minus, #offset_x_plus').on('click', function() {
       if(plot) {
         var direction = ($(this).attr('id') == 'offset_x_minus' ? 'left' : 'right');
@@ -330,7 +308,7 @@
         var min = (options.xaxes[0].min !== null ? options.xaxes[0].min : axes.xaxis.min);
         var max = (options.xaxes[0].max !== null ? options.xaxes[0].max : axes.xaxis.max);
         var offset = (max - min) * range_offset/100;
-        
+
         if(direction == 'left') {
           min -= offset;
           max -= offset;
@@ -339,21 +317,21 @@
           min += offset;
           max += offset;
         }
-        
+
         options.xaxes[0].min = min;
         options.xaxes[0].max = max;
 
         plot.setupGrid();
         plot.draw();
-        
+
         params.local.xmin = min;
         params.local.xmax = max;
-               
+
         updateRanges();
         sendParams(true);
       }
     });
-    
+
     $('#offset_y_minus, #offset_y_plus').on('click', function() {
       if(plot) {
         var direction = ($(this).attr('id') == 'offset_y_minus' ? 'down' : 'up');
@@ -362,7 +340,7 @@
         var min = (options.yaxes[0].min !== null ? options.yaxes[0].min : axes.yaxis.min);
         var max = (options.yaxes[0].max !== null ? options.yaxes[0].max : axes.yaxis.max);
         var offset = (max - min) * range_offset/100;
-        
+
         if(direction == 'down') {
           min -= offset;
           max -= offset;
@@ -371,37 +349,37 @@
           min += offset;
           max += offset;
         }
-        
+
         options.yaxes[0].min = min;
         options.yaxes[0].max = max;
 
         plot.setupGrid();
         plot.draw();
-               
+
         updateRanges();
         updateTriggerSlider();
       }
     });
-      
+
     // Events binding for gain controls
-    
+
     $('#gain_ch1_att').on('change', function() { onDropdownChange($(this), 'prb_att_ch1'); });
     $('#gain_ch1_sett').on('change', function() { onDropdownChange($(this), 'gain_ch1'); });
     $('#gain_ch2_att').on('change', function() { onDropdownChange($(this), 'prb_att_ch2'); });
     $('#gain_ch2_sett').on('change', function() { onDropdownChange($(this), 'gain_ch2'); });
-    
+
     // Events binding for signal generator
-    
-    $('#gen_enable_ch1, #gen_enable_ch2').on('change', function() { 
+
+    $('#gen_enable_ch1, #gen_enable_ch2').on('change', function() {
       params.local[this.id] = ($(this).is(':checked') ? 1 : 0);
-      sendParams(); 
+      sendParams();
     });
-    
+
     $('#gen_ch1_sigtype').on('change', function() { onDropdownChange($(this), 'gen_sig_type_ch1'); });
     $('#gen_ch1_trigmode').on('change', function() { onDropdownChange($(this), 'gen_trig_mod_ch1'); });
     $('#gen_ch2_sigtype').on('change', function() { onDropdownChange($(this), 'gen_sig_type_ch2'); });
     $('#gen_ch2_trigmode').on('change', function() { onDropdownChange($(this), 'gen_trig_mod_ch2'); });
-    
+
     $('#gen_ch1_ampl')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -410,7 +388,7 @@
       .on('blur', function() {
         $('#apply_gen_ch1_ampl').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.gen_sig_amp_ch1 = val;
@@ -429,7 +407,7 @@
           $(this).blur();
         }
       });
-      
+
     $('#gen_ch1_freq')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -438,7 +416,7 @@
       .on('blur', function() {
         $('#apply_gen_ch1_freq').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.gen_sig_freq_ch1 = val;
@@ -457,7 +435,7 @@
           $(this).blur();
         }
       });
-      
+
     $('#gen_ch1_dc')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -466,7 +444,7 @@
       .on('blur', function() {
         $('#apply_gen_ch1_dc').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.gen_sig_dcoff_ch1 = val;
@@ -485,7 +463,7 @@
           $(this).blur();
         }
       });
-      
+
     $('#gen_ch2_ampl')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -494,7 +472,7 @@
       .on('blur', function() {
         $('#apply_gen_ch2_ampl').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.gen_sig_amp_ch2 = val;
@@ -513,7 +491,7 @@
           $(this).blur();
         }
       });
-      
+
     $('#gen_ch2_freq')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -522,7 +500,7 @@
       .on('blur', function() {
         $('#apply_gen_ch2_freq').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.gen_sig_freq_ch2 = val;
@@ -541,7 +519,7 @@
           $(this).blur();
         }
       });
-      
+
     $('#gen_ch2_dc')
       .on('focus paste', function() {
         $(this).parent().addClass('input-group');
@@ -550,7 +528,7 @@
       .on('blur', function() {
         $('#apply_gen_ch2_dc').hide();
         $(this).parent().removeClass('input-group');
-                
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.gen_sig_dcoff_ch2 = val;
@@ -569,20 +547,20 @@
           $(this).blur();
         }
       });
-      
-    
+
+
     // Events binding for PID Controller
-    
-    $('#pid_11_enable, #pid_12_enable, #pid_21_enable, #pid_22_enable').on('change', function() { 
+
+    $('#pid_11_enable, #pid_12_enable, #pid_21_enable, #pid_22_enable').on('change', function() {
       params.local[this.id] = ($(this).is(':checked') ? 1 : 0);
-      sendParams(); 
+      sendParams();
     });
 
-    $('#pid_11_rst, #pid_12_rst, #pid_21_rst, #pid_22_rst').on('change', function() { 
+    $('#pid_11_rst, #pid_12_rst, #pid_21_rst, #pid_22_rst').on('change', function() {
       params.local[this.id] = ($(this).is(':checked') ? 1 : 0);
-      sendParams(); 
+      sendParams();
     });
-    
+
     // PID 11 Setpoint, Kp, Ki, Kd
     $('#pid_11_sp')
       .on('focus paste', function() {
@@ -592,7 +570,7 @@
       .on('blur', function() {
         $('#apply_pid_11_sp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_11_sp = val;
@@ -620,7 +598,7 @@
       .on('blur', function() {
         $('#apply_pid_11_kp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_11_kp = val;
@@ -648,7 +626,7 @@
       .on('blur', function() {
         $('#apply_pid_11_ki').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_11_ki = val;
@@ -676,7 +654,7 @@
       .on('blur', function() {
         $('#apply_pid_11_kd').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_11_kd = val;
@@ -705,7 +683,7 @@
       .on('blur', function() {
         $('#apply_pid_12_sp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_12_sp = val;
@@ -733,7 +711,7 @@
       .on('blur', function() {
         $('#apply_pid_12_kp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_12_kp = val;
@@ -761,7 +739,7 @@
       .on('blur', function() {
         $('#apply_pid_12_ki').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_12_ki = val;
@@ -789,7 +767,7 @@
       .on('blur', function() {
         $('#apply_pid_12_kd').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_12_kd = val;
@@ -818,7 +796,7 @@
       .on('blur', function() {
         $('#apply_pid_21_sp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_21_sp = val;
@@ -846,7 +824,7 @@
       .on('blur', function() {
         $('#apply_pid_21_kp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_21_kp = val;
@@ -874,7 +852,7 @@
       .on('blur', function() {
         $('#apply_pid_21_ki').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_21_ki = val;
@@ -902,7 +880,7 @@
       .on('blur', function() {
         $('#apply_pid_21_kd').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_21_kd = val;
@@ -931,7 +909,7 @@
       .on('blur', function() {
         $('#apply_pid_22_sp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_22_sp = val;
@@ -959,7 +937,7 @@
       .on('blur', function() {
         $('#apply_pid_22_kp').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_22_kp = val;
@@ -987,7 +965,7 @@
       .on('blur', function() {
         $('#apply_pid_22_ki').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_22_ki = val;
@@ -1015,7 +993,7 @@
       .on('blur', function() {
         $('#apply_pid_22_kd').hide();
         $(this).parent().removeClass('input-group');
-        
+
         var val = parseLocalFloat($(this).val());
         if(! isNaN(val)) {
           params.local.pid_22_kd = val;
@@ -1034,70 +1012,240 @@
           $(this).blur();
         }
       });
-    
-    
+
+
     // Modals
-    
+
     $('#modal_err, #modal_app').modal({ show: false, backdrop: 'static', keyboard: false });
     $('#modal_upload').modal({ show: false });
-    
+
+    $('#modal_help').modal({ show: false, backdrop: 'static', keyboard: false });
+    $('#modal_save').modal({ show: false, backdrop: 'static', keyboard: false });
+    $('#modal_config').modal({ show: false, backdrop: 'static', keyboard: false });
+
+
     $('#btn_switch_app').on('click', function() {
       var newapp_id = $('#new_app_id').text();
       if(newapp_id.length) {
         location.href = location.href.replace(app_id, newapp_id);
       }
     });
-    
+
     $('.btn-app-restart').on('click', function() {
       location.reload();
     });
-    
+
     $('#btn_retry_get').on('click', function() {
       $('#modal_err').modal('hide');
       updateGraphData();
     });
-    
+
+    $('#btn_close').on('click', function() {
+      $('#modal_help').modal('hide');
+      //updateGraphData();
+    });
+
+    $('#btn_close_save').on('click', function() {
+      $('#modal_save').modal('hide');
+      //updateGraphData();
+    });
+
+    $('#btn_close_config').on('click', function() {
+      $('#modal_config').modal('hide');
+      //updateGraphData();
+    });
+
     $('.btn-close-modal').on('click', function() {
       $(this).closest('.modal').modal('hide');
     });
-    
+
     // Reset the upload form to prevent browser caching of the uploaded file name
     $('#upload_form')[0].reset();
-      
+
     // Other event bindings
-    
+
     $('#trigger_tooltip').tooltip({
       title: '',
       trigger: 'manual',
       placement: 'auto left',
       animation: false
     });
-    
+
     $('.btn').on('click', function() {
       var btn = $(this);
       setTimeout(function() { btn.blur(); }, 10);
     });
-    
+
     $('#btn_toolbar .btn').on('blur', function() {
       $(this).removeClass('active');
     });
-    
+
     $(document).on('click', '#accordion > .panel > .panel-heading', function(event) {
       $(this).next('.panel-collapse').collapse('toggle');
       event.stopImmediatePropagation();
     });
-    
+
     // Tooltips for range buttons
     $('#range_x_minus, #range_x_plus, #range_y_minus, #range_y_plus').tooltip({
       container: 'body'
     });
-    
-    
+
+    // LOLO begin ------------------------------------------------------
+
+
+    // [LOLO DOCK PAGELOAD]
+
+    // Number inputs
+    var input_number=[];
+
+    for(ii in input_number){
+      $('#'+input_number[ii])
+        // on focus or paste, start editing mode
+        .on('focus paste', function() {
+            iname=$(this)[0].id;
+            $(this).parent().addClass('input-group');
+            //$('#'+iname+'_apply').show();
+         })
+        // on blur (focus lost), check data and send to server
+        .on('blur', function(event) {
+            iname=$(this)[0].id;
+            //console.log(iname);
+            //$('#'+iname+'_apply').hide();
+            text_param_editor='';
+            $(this).parent().removeClass('input-group');
+            var val = parseLocalFloat($(this).val());
+            if(! isNaN(val)) {
+              params.local[iname] = val;
+              sendParams();
+            }
+            else {
+              $(this).val(params.local[iname])
+            }
+            if(event.relatedTarget)
+              if(event.relatedTarget.tagName=="INPUT")
+                setTimeout(function(){ user_editing = true; }, update_interval ) ;
+            user_editing = false;
+        })
+        .on('input', function(event) {
+            iname=$(this)[0].id;
+            //console.log('input:'+iname);
+            //$('#'+iname+'_apply').hide();
+            user_editing = true;
+            var val = parseLocalFloat($(this).val());
+            setTimeout(function(pp){
+              iname=pp[1];
+              //console.log(iname);
+              //console.log(user_editing);
+              if (text_param_editor==''){
+                var val = parseLocalFloat($('#'+iname).val());
+                if(val==pp[0]){
+                  if(! isNaN(val)) {
+                    params.local[iname] = val;
+                    sendParams();
+                  }
+                }
+              }
+              user_editing = true;
+            }, 100  , [val,iname] ) ;
+        })
+        .on('keydown', function(e) {
+            //console.log('keydown:'+$(this)[0].id);
+            //console.log('log:'+text_param_editor+' key:'+e.key );
+            if( $.inArray(e.key, ['Backspace','Delete','0','1','2','3','4','5','6','7','8','9','+','-',',','.'] ) >0 ){
+              text_param_editor=$(this)[0].id;
+              //console.log('now:'+text_param_editor);
+              //e.preventDefault();
+              e.stopPropagation();
+            }
+        })
+        // If press "enter", launch .blur()
+        .on('keypress', function(e) {
+            if(e.keyCode == 13) {
+              $(this).blur();
+            }
+        });
+
+    }
+
+
+
+    // Switches
+    var switches=[];
+    for(ii in switches)
+        $(switches[ii]).on('change', function() { onDropdownChange($(this), $(this)[0].id ); });
+
+    // [LOLO DOCK PAGELOAD END]
+
+    console.log('input_buttons');
+    // Buttons
+    var input_buttons = '#raw_mode';
+    $(input_buttons).on('click', function() {
+      $(this).toggleClass('btn-default btn-primary');
+      params.local[this.id] = ($(this).is('.btn-primary') ? 1 : 0);
+      console.log('btn: ' + this.id);
+      sendParams();
+    });
+
+    // Checkboxes inputs
+    var input_checkboxes = '';
+    $(input_checkboxes).on('change', function() {
+      params.local[this.id] = ($(this).is(':checked') ? 1 : 0);
+      sendParams();
+    });
+
+
+
+
+    $('#btn_disp_units')
+      .on('click', function() {
+          if(! plot) return;
+          $('#btn_disp_units').toggleClass('btn-default btn-primary');
+
+          if($('#btn_disp_units').hasClass('btn-primary')) {
+            $('#btn_disp_units').data('checked', true);
+            $('#btn_disp_units').html('Raw');
+          }
+          else{
+            $('#btn_disp_units').data('checked', false);
+            $('#btn_disp_units').html('Units');
+          }
+       });
+
+    $('#btn_disp_sq')
+      .on('click', function() {
+          if(! plot) return;
+          $('#btn_disp_sq').toggleClass('btn-default btn-primary');
+
+          if($('#btn_disp_sq').hasClass('btn-primary')) {
+            $('#btn_disp_sq').data('checked', true);
+            $('#btn_disp_sq').html('Square');
+          }
+          else{
+            $('#btn_disp_sq').data('checked', false);
+            $('#btn_disp_sq').html('Harmonic');
+          }
+       });
+
+     $('#btn_disp_norm')
+      .on('click', function() {
+          if(! plot) return;
+          $('#btn_disp_norm').toggleClass('btn-default btn-primary');
+
+          if($('#btn_disp_norm').hasClass('btn-primary')) {
+            $('#btn_disp_norm').data('checked', true);
+            $('#btn_disp_norm').html('Output');
+          }
+          else{
+            $('#btn_disp_norm').data('checked', false);
+            $('#btn_disp_norm').html('Measure');
+          }
+       });
+
     $('#btn_stop')
       .on('click', function() {
           if(! plot) return;
           $('#btn_stop').toggleClass('btn-default btn-primary');
-          
+
           if($('#btn_stop').hasClass('btn-primary')) {
             scope_stop = false;
             updateGraphData();
@@ -1106,11 +1254,15 @@
             scope_stop = true;
           }
        });
-    
+
+
+
+
+
     $('#btn_save')
       .on('click', function() {
           if(! plot) return;
-          
+
           if($('#btn_stop').hasClass('btn-primary')) {
             scope_stop = false;
             updateGraphData();
@@ -1119,101 +1271,145 @@
             scope_stop = true;
           }
        });
-    
-    
-    $('#btn_save')
-      .on('click', function() {
-          if(! plot) return;
-          
-          if($('#btn_stop').hasClass('btn-primary')) {
-            scope_stop = false;
-            updateGraphData();
-          }
-          else{
-            scope_stop = true;
-          }
-       });
-    
+
     $('#copy_python')
       .on('click', function() {
           if(! plot) return;
           event.preventDefault();
-          
+
           $('#python_hide').removeClass('collapse');
           $('#text_python_data')[0].select();
           document.execCommand('copy');
           $('#python_hide').addClass('collapse');
        });
-    
+
     $('#copy_matlab')
       .on('click', function() {
           if(! plot) return;
           event.preventDefault();
-          
+
           $('#matlab_hide').removeClass('collapse');
           $('#text_matlab_data')[0].select();
           document.execCommand('copy');
           $('#matlab_hide').addClass('collapse');
        });
-    
+
     $('#copy_csv')
       .on('click', function() {
           if(! plot) return;
           event.preventDefault();
-          
+
           $('#csv_hide').removeClass('collapse');
           $('#text_csv_data')[0].select();
           document.execCommand('copy');
           $('#csv_hide').addClass('collapse');
        });
-    
+
     if ( ! document.queryCommandSupported('copy') ) {
       var txt=$('#copy_python').html();
       $('#copy_python').html("<del>"+txt+"</del>");
-      
+
       txt=$('#copy_matlab').html();
       $('#copy_matlab').html("<del>"+txt+"</del>");
-      
+
       txt=$('#copy_csv').html();
       $('#copy_csv').html("<del>"+txt+"</del>");
     }
-    
-    
+
+
     // LOLO modifications
-    
-    $('#pyrun').prop('disabled', false);
-    
+
+
+    $('#plot_holder').on("plothover", function (event, pos, item) {
+        var str = "(" + pos.x.toFixed(2) + ", " + pos.y.toFixed(2) + ")";
+        $("#hoverdata").text(str);
+    });
+
+    $("#plot_holder").on("plotclick", function (event, pos, item) {
+      console.log('plot click');
+    });
+
+
+
+    $('[data-toggle="tooltip"]').tooltip({container: 'body'});
+
+    $('option[data-tag=pidA_more]').hide();
+    $('option[data-tag=pidB_more]').hide();
+
+    $('#btn_config_load_file')[0].addEventListener('change', config_load_file, false);
+
+    $('#config_name_input').on('change', function() {  config_save_file();  });
+
+    $(document).on('click', '#Fnavtabs .nav-tabs li', function() {
+        $(".nav-tabs li").removeClass("active");
+        $(this).addClass("active");
+        //$('#slow_lock_in_hide div.row[id!="tab_header"]').hide();
+        $('#tab_F1_body,#tab_F2_body,#tab_F3_body').hide();
+        var tab_name = $(this).text().slice(-2) ;
+        //console.log(tab_name);
+        $('#tab_'+tab_name+'_body').show();
+
+    });
+
+    $('#btn_set_trig').prop('disabled', false);
+    $('#btn_disp_sq').data('checked', false);
+
+
+
     // LOLO end
-    
-    
+
+
     // Load first data
     updateGraphData();
-    
+
     // Stop the application when page is unloaded
-    window.onbeforeunload = function() { 
+    window.onbeforeunload = function() {
       $.ajax({
         url: stop_app_url,
         async: false
       });
     };
-            
+
   });
-  
-  
-  
+
+// REVISAR TODO
+
+var units={ "-4": 'p', "-3": 'n', "-2": 'u', "-1": 'm', "0": '&nbsp;', "1": 'k', "2": 'M', "3": 'G', "4": 'T' };
+var magni={ "-4": '×10<sup>-12</sup>',"-3": '×10<sup>-9</sup>', "-2": '×10<sup>-6</sup>', "-1": '×10<sup>-3</sup>',
+            "0": ' ',
+            "1": '×10<sup>3</sup>', "2": '×10<sup>6</sup>', "3": '×10<sup>9</sup>', "4": '×10<sup>12</sup>' };
+
+function format_oom(num,unit="&nbsp;",pre=3){
+    var oom = num==0 ? 0 : Math.floor(  Math.log10(Math.abs(num))/3) ;
+    var val = num/10**(3*oom);
+    pre=Math.max(2,pre);
+    var txt = val.toPrecision(pre)+"&nbsp;"+units[oom.toString()] + unit;
+    return txt;
+}
+
+function showModalHelp(err_msg) {
+  var err_modal = $('#modal_help');
+
+  err_modal.find('.modal-body').html(err_msg);
+  err_modal.modal('show');
+}
+
+// END REVISAR
+
   function showModalSave(err_msg) {
     var save_modal = $('#modal_save');
-    
+
     // Python save
     vectxt_py="from numpy import * \nimport matplotlib.pyplot as plt\n\n";
-    
+    vectxt_py+="# Application: "+app_id+"\n# Version: "+app_version+"\n\n";
+
     if ($('#btn_ch' + 1).data('checked')) {
         vectxt_py+="##################################################\n";
         vectxt_py+="# Channel 1 data\n";
         vectxt_py+="##################################################\n\n";
         vectxt_py+="t1  = array([ ";
-        
-        for (i = 0; i < plot.getData()[0].data.length; i++) { 
+
+        for (i = 0; i < plot.getData()[0].data.length; i++) {
             addnum  = plot.getData()[0].data[i][0].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1225,7 +1421,7 @@
         vectxt_py += " ]) ;\n\n";
 
         vectxt_py+="ch1 = array([ ";
-        for (i = 0; i < plot.getData()[0].data.length; i++) { 
+        for (i = 0; i < plot.getData()[0].data.length; i++) {
             addnum  = plot.getData()[0].data[i][1].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1240,7 +1436,7 @@
         vectxt_py+="# Channel 2 data\n";
         vectxt_py+="##################################################\n\n";
         vectxt_py+="t2  = array([ ";
-        for (i = 0; i < plot.getData()[1].data.length; i++) { 
+        for (i = 0; i < plot.getData()[1].data.length; i++) {
             addnum  = plot.getData()[1].data[i][0].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1252,7 +1448,7 @@
         vectxt_py += " ]) ;\n\n";
 
         vectxt_py+="ch2 = array([ ";
-        for (i = 0; i < plot.getData()[1].data.length; i++) { 
+        for (i = 0; i < plot.getData()[1].data.length; i++) {
             addnum  = plot.getData()[1].data[i][1].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1262,33 +1458,34 @@
         }
         vectxt_py += " ]) ;\n\n";
     }
-    
-    
+
+
     var arr=[];
     var ii=0;
 
-    for (var property in params.local ) { 
+    for (var property in params.local ) {
       arr[ii]='        '+'"'+property+'":'+' '+ params.local[property];
       ii++;
     }
 
     vectxt_py += '\nparams={\n' + arr.join(', \n') + '\n}\n\n';
-    
-    
-    
+
+
+
     $('#text_python_data').val(vectxt_py);
-    
-    
+
+
     // matlab save
-    vectxt_mat="%% scope+lock saved data\n\n";
-    
+    vectxt_mat="%% scope++ saved data\n\n";
+    vectxt_mat+="% Application: "+app_id+"\n% Version: "+app_version+"\n\n";
+
     if ($('#btn_ch' + 1).data('checked')) {
         vectxt_mat+="%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n";
         vectxt_mat+="% Channel 1 data\n";
         vectxt_mat+="%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n\n";
         vectxt_mat+="t1  = [ ";
-        
-        for (i = 0; i < plot.getData()[0].data.length; i++) { 
+
+        for (i = 0; i < plot.getData()[0].data.length; i++) {
             addnum  = plot.getData()[0].data[i][0].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1300,7 +1497,7 @@
         vectxt_mat += " ] ;\n\n";
 
         vectxt_mat+="ch1 = [ ";
-        for (i = 0; i < plot.getData()[0].data.length; i++) { 
+        for (i = 0; i < plot.getData()[0].data.length; i++) {
             addnum  = plot.getData()[0].data[i][1].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1315,7 +1512,7 @@
         vectxt_mat+="% Channel 2 data\n";
         vectxt_mat+="%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n\n";
         vectxt_mat+="t2  = array([ ";
-        for (i = 0; i < plot.getData()[1].data.length; i++) { 
+        for (i = 0; i < plot.getData()[1].data.length; i++) {
             addnum  = plot.getData()[1].data[i][0].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1327,7 +1524,7 @@
         vectxt_mat += " ] ;\n\n";
 
         vectxt_mat+="ch2 = array([ ";
-        for (i = 0; i < plot.getData()[1].data.length; i++) { 
+        for (i = 0; i < plot.getData()[1].data.length; i++) {
             addnum  = plot.getData()[1].data[i][1].toFixed(3);
             if(addnum.length<8)
               addnum = " ".repeat(8-addnum.length) + addnum ;
@@ -1337,9 +1534,9 @@
         }
         vectxt_mat += " ] ;\n\n";
     }
-    
+
     $('#text_matlab_data').val(vectxt_mat);
-    
+
     // csv save
     vectxt_csv="";
     if ($('#btn_ch' + 1).data('checked')){
@@ -1352,7 +1549,7 @@
     }
     if ($('#btn_ch' + 2).data('checked'))
       vectxt_csv+="t2      ,ch2     \n";
-    
+
     for (i = 0; i < plot.getData()[0].data.length; i++) {
       if ($('#btn_ch' + 1).data('checked')) {
         addnum  = plot.getData()[0].data[i][0].toFixed(3);
@@ -1381,41 +1578,39 @@
           addnum = " ".repeat(8-addnum.length) + addnum ;
         vectxt_csv += addnum;
         vectxt_csv += "\n";
-        
+
       }
     }
-    
+
     $('#text_csv_data').val(vectxt_csv);
-    
-    
-    var rightNow = new Date();
-    var filename_py  =  "data_";
-    filename_py  += rightNow.toISOString().slice(0,10).replace(/-/g,"") + "_";
-    filename_py  += rightNow.toISOString().slice(11,19).replace(/:/g,"") + ".py";
-    
-    var filename_mat  =  "data_";
-    filename_mat  += rightNow.toISOString().slice(0,10).replace(/-/g,"") + "_";
-    filename_mat  += rightNow.toISOString().slice(11,19).replace(/:/g,"") + ".m";
-    
-    var filename_csv  =  "data_";
-    filename_csv  += rightNow.toISOString().slice(0,10).replace(/-/g,"") + "_";
-    filename_csv  += rightNow.toISOString().slice(11,19).replace(/:/g,"") + ".csv";
-    
+
+
+    var filename_py   =  "data_" + now() + ".py" ;
+    var filename_mat  =  "data_" + now() + ".m"  ;
+    var filename_csv  =  "data_" + now() + ".csv";
+
     $('#save_python')[0].download = filename_py;
     $('#save_python')[0].href     = "data:application/octet-stream," + encodeURIComponent(vectxt_py);
-    
+
     $('#save_matlab')[0].download = filename_mat;
     $('#save_matlab')[0].href     = "data:application/octet-stream," + encodeURIComponent(vectxt_mat);
-    
+
     $('#save_csv')[0].download = filename_csv;
     $('#save_csv')[0].href     = "data:application/octet-stream," + encodeURIComponent(vectxt_csv);
-    
+
     save_modal.modal('show');
-    
+
   }
 
-  
-  
+  function showModalConfig(err_msg) {
+    var config_modal = $('#modal_config');
+    config_show_storage();
+    $("#config_name_input").val("config_" + now() );
+    config_save_file();
+    config_modal.modal('show');
+  }
+
+
   function startApp() {
     $.get(
       start_app_url
@@ -1426,12 +1621,12 @@
       }
       else {
         $.post(
-          post_url, 
+          post_url,
           JSON.stringify({ datasets: { params: def_params } })
         )
         .done(function(dresult) {
           app_started = true;
-          updateGraphData();      
+          updateGraphData();
         })
         .fail(function() {
           showModalError('Could not initialize the application with default parameters.', false, true);
@@ -1442,17 +1637,17 @@
       showModalError('Could not start the application.', true);
     });
   }
-  
+
   function showModalError(err_msg, retry_btn, restart_btn, ignore_btn) {
     var err_modal = $('#modal_err');
-    
+
     err_modal.find('#btn_retry_get')[retry_btn ? 'show' : 'hide']();
     err_modal.find('.btn-app-restart')[restart_btn ? 'show' : 'hide']();
     err_modal.find('#btn_ignore')[ignore_btn ? 'show' : 'hide']();
     err_modal.find('.modal-body').html(err_msg);
     err_modal.modal('show');
-  }   
-  
+  }
+
   function updateGraphData() {
     if(downloading||scope_stop) {
       return;
@@ -1462,13 +1657,13 @@
       update_timer = null;
     }
     downloading = true;
-    
+
     // Send params if there are any unsent changes
     sendParams();
-    
+
     var arun_before_ajax = autorun;
     var long_timeout_used = use_long_timeout;
-    
+
     $.ajax({
       url: get_url,
       timeout: (use_long_timeout ? long_timeout : request_timeout),
@@ -1476,7 +1671,7 @@
     })
     .done(function(dresult) {
       last_get_failed = false;
-      
+
       if(dresult.status === 'ERROR') {
         if(! app_started) {
           startApp();
@@ -1497,20 +1692,20 @@
           }
           return;
         }
-        
+
         app_started = true;
         updateGraphDataCount++;
-        
+
         // Check if trigger mode (which may switch autorun) was changed during ajax request
         var arun_after_ajax = autorun;
-        
+
         datasets = [];
         for(var i=0; i<dresult.datasets.g1.length; i++) {
           dresult.datasets.g1[i].color = i;
-          dresult.datasets.g1[i].label = 'Channel ' + (i+1);          
+          dresult.datasets.g1[i].label = 'Channel ' + (i+1);
           datasets.push(dresult.datasets.g1[i]);
         }
-        
+
         if(! plot) {
           initPlot(dresult.datasets.params);
         }
@@ -1518,34 +1713,34 @@
           // Apply the params state received from server if not in edit mode
           if(! user_editing) {
             loadParams(dresult.datasets.params);
-            
-            // Restore the autorun value modified by loadParams 
+
+            // Restore the autorun value modified by loadParams
             if(arun_before_ajax != arun_after_ajax) {
-              autorun = arun_after_ajax; 
+              autorun = arun_after_ajax;
             }
           }
           // Time units must be always updated
           else {
             updateTimeUnits(dresult.datasets.params);
           }
-          
+
           // Force X min/max
           if(dresult.datasets.params.forcex_flag == 1) {
             var options = plot.getOptions();
             options.xaxes[0].min = dresult.datasets.params.xmin;
             options.xaxes[0].max = dresult.datasets.params.xmax;
           }
-          
+
           // Redraw the plot using new datasets
           plot.setData(filterData(datasets, plot.width()));
           plot.setupGrid();
           plot.draw();
         }
-        
+
         if(! trig_dragging) {
           updateTriggerSlider();
         }
-        
+
         updateRanges();
 
         if(autorun || dresult.status === 'AGAIN') {
@@ -1578,7 +1773,7 @@
     .always(function() {
       if(! last_get_failed) {
         downloading = false;
-        
+
         if(params.local) {
           // Disable trigger level input if trigger source is External or mode is not Normal
           if(params.original.trig_mode != 1 || params.original.trig_source == 2) {
@@ -1591,46 +1786,46 @@
           else {
             $('#trig_level').prop('disabled', false);
           }
-          
+
           // Manage the state of other components
           $('#accordion').find('input,select').not('#trig_level').prop('disabled', false);
           $('.btn').not('#btn_single, #range_y_plus, #range_y_minus, #range_x_plus, #range_x_minus, #gen_ch1_single, #gen_ch2_single').prop('disabled', false);
         }
       }
-      
+
       if(long_timeout_used) {
         use_long_timeout = false;
       }
     });
   }
-  
+
   function initPlot(init_params) {
     var plot_holder = $('#plot_holder');
     var ymax = init_params.gui_reset_y_range / 2;
     var ymin = ymax * -1;
-    
+
     // Load received params
     loadParams(init_params);
-    
+
     // When xmin/xmax are null, the min/max values of received data will be used. For ymin/ymax use the gui_reset_y_range param.
     $.extend(true, plot_options, {
       xaxis: { min: null, max: null },
       yaxis: { min: ymin, max: ymax }
     });
-    
-    // Local optimization    
+
+    // Local optimization
     var filtered_data = filterData(datasets, plot_holder.width());
-  
+
     // Plot first creation and drawing
     plot = $.plot(
-      plot_holder, 
+      plot_holder,
       filtered_data,
       plot_options
     );
-    
+
     // Selection
     plot_holder.on('plotselected', function(event, ranges) {
-    
+
       // Clamp the zooming to prevent eternal zoom
       if(ranges.xaxis.to - ranges.xaxis.from < 0.00001) {
         ranges.xaxis.to = ranges.xaxis.from + 0.00001;
@@ -1638,59 +1833,59 @@
       if(ranges.yaxis.to - ranges.yaxis.from < 0.00001) {
         ranges.yaxis.to = ranges.yaxis.from + 0.00001;
       }
-  
+
       // Do the zooming
       plot = $.plot(
-        plot_holder, 
+        plot_holder,
         getData(ranges.xaxis.from, ranges.xaxis.to),
         $.extend(true, plot_options, {
           xaxis: { min: ranges.xaxis.from, max: ranges.xaxis.to },
           yaxis: { min: ranges.yaxis.from, max: ranges.yaxis.to }
         })
       );
-      
+
       params.local.xmin = parseFloat(ranges.xaxis.from.toFixed(xdecimal_places));
       params.local.xmax = parseFloat(ranges.xaxis.to.toFixed(xdecimal_places));
-      
+
       updateTriggerSlider();
       sendParams(true);
     });
-    
+
     // Zoom / Pan
     plot_holder.on('plotzoom plotpan touchmove touchend', function(event) {
-      
+
       if(zoompan_timer) {
         clearTimeout(zoompan_timer);
         zoompan_timer = null;
       }
-      
+
       zoompan_timer = setTimeout(function() {
         zoompan_timer = null;
-        
+
         var xaxis = plot.getAxes().xaxis;
         params.local.xmin = parseFloat(xaxis.min.toFixed(xdecimal_places));
         params.local.xmax = parseFloat(xaxis.max.toFixed(xdecimal_places));
-        
+
         updateTriggerSlider();
         sendParams(true);
-                
+
       }, 250);
     });
   }
-  
+
   function onDropdownChange(that, param_name, do_get) {
     params.local[param_name] = parseInt(that.val());
     sendParams(do_get);
     that.blur();
     user_editing = false;
   }
-  
+
   function loadParams(orig_params) {
     if(! $.isPlainObject(orig_params)) {
       return;
     }
-    
-    // Ignore xmin/xmax values received from server. That values must be used only on AUTO button click 
+
+    // Ignore xmin/xmax values received from server. That values must be used only on AUTO button click
     // and on ForceX flag, but that is done before the sendParams() function is called.
     if(plot) {
       var options = plot.getOptions();
@@ -1699,23 +1894,24 @@
         orig_params.xmax = options.xaxes[0].max;
       }
     }
-    
+    // LOLO
+
     // Same data in local and original params
     params.original = $.extend({}, orig_params);
     params.local = $.extend({}, params.original);
 
     // Autorun if trigger mode is Auto(0) or Normal(1), stop if it is Single(2)
     autorun = (params.original.trig_mode == 2 ? 0 : 1);
-    
+
     // Enable the Single button when not in autorun mode
     $('#btn_single').prop('disabled', autorun);
-    
+
     $('#trig_mode').val(params.original.trig_mode);
     $('#trig_source').val(params.original.trig_source);
     $('#trig_edge').val(params.original.trig_edge);
     var scale = (params.original.trig_source == 0 ? params.original.scale_ch1 : params.original.scale_ch2);
     $('#trig_level').val(floatToLocalString(params.original.trig_level * scale));
-    
+
     if ((refresh_counter++ % meas_panel_dec) == 0) {
         $('#info_ch1_min').html(floatToLocalString(shortenFloat(params.original.meas_min_ch1)));
         $('#info_ch1_max').html(floatToLocalString(shortenFloat(params.original.meas_max_ch1)));
@@ -1731,33 +1927,33 @@
         $('#info_ch2_freq').html(convertHz(params.original.meas_freq_ch2));
         $('#info_ch2_period').html(convertSec(params.original.meas_per_ch2));
     }
-    
+
     $('#gain_ch1_att').val(params.original.prb_att_ch1);
     $('#gain_ch1_sett').val(params.original.gain_ch1);
     $('#gain_ch2_att').val(params.original.prb_att_ch2);
     $('#gain_ch2_sett').val(params.original.gain_ch2);
-    
+
     $('#gen_enable_ch1').prop('checked', (params.original.gen_enable_ch1 ? true : false));
     $('#gen_enable_ch2').prop('checked', (params.original.gen_enable_ch2 ? true : false));
-    
+
     $('#gen_ch1_sigtype').val(params.original.gen_sig_type_ch1);
     $('#gen_ch1_ampl').val(floatToLocalString(params.original.gen_sig_amp_ch1));
     $('#gen_ch1_freq').val(floatToLocalString(params.original.gen_sig_freq_ch1));
     $('#gen_ch1_dc').val(floatToLocalString(params.original.gen_sig_dcoff_ch1));
     $('#gen_ch1_trigmode').val(params.original.gen_trig_mod_ch1);
-    
+
     $('#gen_ch2_sigtype').val(params.original.gen_sig_type_ch2);
     $('#gen_ch2_ampl').val(floatToLocalString(params.original.gen_sig_amp_ch2));
     $('#gen_ch2_freq').val(floatToLocalString(params.original.gen_sig_freq_ch2));
     $('#gen_ch2_dc').val(floatToLocalString(params.original.gen_sig_dcoff_ch2));
     $('#gen_ch2_trigmode').val(params.original.gen_trig_mod_ch2);
-    
-    $('#gen_ch1_single').prop('disabled', (params.original.gen_trig_mod_ch1 == 1 ? false : true));
-    $('#gen_ch2_single').prop('disabled', (params.original.gen_trig_mod_ch2 == 1 ? false : true));    
-    
-    
 
-   
+    $('#gen_ch1_single').prop('disabled', (params.original.gen_trig_mod_ch1 == 1 ? false : true));
+    $('#gen_ch2_single').prop('disabled', (params.original.gen_trig_mod_ch2 == 1 ? false : true));
+
+
+
+
     $('#pid_11_enable').prop('checked', (params.original.pid_11_enable ? true : false));
     $('#pid_12_enable').prop('checked', (params.original.pid_12_enable ? true : false));
     $('#pid_21_enable').prop('checked', (params.original.pid_21_enable ? true : false));
@@ -1767,7 +1963,7 @@
     $('#pid_12_rst').prop('checked', (params.original.pid_12_rst ? true : false));
     $('#pid_21_rst').prop('checked', (params.original.pid_21_rst ? true : false));
     $('#pid_22_rst').prop('checked', (params.original.pid_22_rst ? true : false));
-    
+
     $('#pid_11_sp').val(params.original.pid_11_sp);
     $('#pid_11_kp').val(params.original.pid_11_kp);
     $('#pid_11_ki').val(params.original.pid_11_ki);
@@ -1784,32 +1980,44 @@
     $('#pid_22_kp').val(params.original.pid_22_kp);
     $('#pid_22_ki').val(params.original.pid_22_ki);
     $('#pid_22_kd').val(params.original.pid_22_kd);
-    
 
-    
-    
+
+
+
     if(params.original.en_avg_at_dec) {
       $('#btn_avg').removeClass('btn-default').addClass('btn-primary');
     }
     else {
       $('#btn_avg').removeClass('btn-primary').addClass('btn-default');
     }
-    
+
+    // MASREVISAR
+
+    // [LOLO DOCK LOADPARAMS]
+
+    // Buttons
+
+    // [LOLO DOCK LOADPARAMS END]
+
+
+
+    // END MASREVISAR
+
     updateTimeUnits(orig_params);
     $('#ytitle').show();
   }
-  
+
   function updateTimeUnits(new_params) {
     if(! $.isPlainObject(new_params)) {
       return;
-    } 
-    
+    }
+
     params.original.time_units = params.local.time_units = new_params.time_units;
 
     var timeu_lbl = (params.original.time_units == 0 ? 'μs' : (params.original.time_units == 1 ? 'ms' : 's'));
     $('#xtitle').text('Time [ ' + timeu_lbl + ' ]');
   }
-  
+
   function isParamChanged() {
     if(params.original) {
       for(var key in params.original) {
@@ -1820,18 +2028,18 @@
     }
     return false;
   }
-  
+
   function sendParams(refresh_data, force_send, single_btn) {
     if(sending || (force_send !== true && !isParamChanged())) {
       send_que = sending;
       return;
     }
-    
+
     var auto_flag = params.local.auto_flag;  // Keep the value of auto_flag, because in POST response it is always 0
     sending = true;
     params.local.single_btn = (single_btn === true ? 1 : 0);
     use_long_timeout = !!auto_flag;
-  
+
     $.ajax({
       type: 'POST',
       url: post_url,
@@ -1842,18 +2050,18 @@
     .done(function(dresult) {
       // OK: Load the params received as POST result
       if(dresult.datasets !== undefined && dresult.datasets.params !== undefined) {
-        
+
         sendParamsCount++;
-        
+
         // Use the provided min/max values only once after AUTO button was clicked
         if(auto_flag == 1 && dresult.datasets.params.min_y !== dresult.datasets.params.max_y) {
           var options = plot.getOptions();
-          
+
           options.xaxes[0].min = dresult.datasets.params.xmin;
           options.xaxes[0].max = dresult.datasets.params.xmax;
           options.yaxes[0].min = dresult.datasets.params.min_y;
           options.yaxes[0].max = dresult.datasets.params.max_y;
-          
+
           // Enable both channels after click on AUTO button
           if(!$('#btn_ch1').data('checked') || !$('#btn_ch2').data('checked')) {
             $('#btn_ch1').data('checked', true).removeClass('btn-default').addClass('btn-primary');
@@ -1866,23 +2074,23 @@
             plot.draw();
           }
         }
-      
+
         if(auto_flag == 0 && dresult.datasets.params.forcex_flag == 1) {
           var options = plot.getOptions();
-          
+
           options.xaxes[0].min = dresult.datasets.params.xmin;
           options.xaxes[0].max = dresult.datasets.params.xmax;
-         
+
           plot.setupGrid();
           plot.draw();
-        }      
-      
+        }
+
         loadParams(dresult.datasets.params);
         updateTriggerSlider();
-        
+
         if(refresh_data && !downloading) {
           updateGraphData();
-        } 
+        }
       }
       else if(dresult.status == 'ERROR') {
         showModalError((dresult.reason ? dresult.reason : 'Error while sending data (E1).'), false, true, true);
@@ -1898,7 +2106,7 @@
     .always(function() {
       sending = false;
       user_editing = false;
-      
+
       if(send_que) {
         send_que = false;
         setTimeout(function(refresh_data) {
@@ -1907,7 +2115,7 @@
       }
     });
   }
-  
+
   function getData(from, to) {
     var rangedata = new Array();
     for(var i=0; i<datasets.length; i++) {
@@ -1927,9 +2135,9 @@
     rangedata = filterData(rangedata, (plot ? plot.width() : $('plot_holder').width()));
     return rangedata;
   }
-  
-  // Use only data for selected channels and do downsamling (data decimation), which is required for 
-  // better performance. On the canvas cannot be shown too much graph points. 
+
+  // Use only data for selected channels and do downsamling (data decimation), which is required for
+  // better performance. On the canvas cannot be shown too much graph points.
   function filterData(dsets, points) {
     var filtered = [];
     var num_of_channels = 2;
@@ -1942,7 +2150,7 @@
       i = Math.min(l, dsets.length - 1);
 
       filtered.push({ color: dsets[i].color, label: dsets[i].label, data: [] });
-      
+
       if(points_per_px === null || dsets[i].data.length > points * points_per_px) {
         var step = Math.ceil(dsets[i].data.length / (points * points_per_px));
         var k = 0;
@@ -1958,18 +2166,18 @@
         filtered[filtered.length - 1].data = dsets[i].data.slice(0);
       }
     }
-    
+
     filtered = addTriggerDataSet(filtered);
     return filtered;
   }
-  
+
   // Add a data series for the trigger level line
   function addTriggerDataSet(dsets) {
 
     // Transform trigger level to real values
     var scale = (params.local.trig_source == 0 ? params.local.scale_ch1 : params.local.scale_ch2);
     var tlev = params.local.trig_level * scale;
-  
+
     // Don't add trigger dataset if trigger level is outside the visible area...
     if(plot) {
       var yaxis = plot.getAxes().yaxis;
@@ -1986,7 +2194,7 @@
       return dsets;
     }
     // ...or outside of received data for Y axis
-    var ch1ymin = null, 
+    var ch1ymin = null,
         ch1ymax = null;
     // Find Y min/max values from data for first visible channel
     for(var i=0; i<dsets[0].data.length; i++) {
@@ -1994,7 +2202,7 @@
       ch1ymax = (ch1ymax === null || ch1ymax < dsets[0].data[i][1] ? dsets[0].data[i][1] : ch1ymax);
     }
     if(dsets.length > 1) {
-      var ch2ymin = null, 
+      var ch2ymin = null,
           ch2ymax = null;
       // Find Y min/max values from data for second visible channel
       for(var i=0; i<dsets[1].data.length; i++) {
@@ -2012,22 +2220,22 @@
         return dsets;
       }
     }
-  
+
     var index = 0;
     var dxmin = 0;
     var dxmax = 1;
-    
+
     if(dsets.length && dsets[0].data[0]) {
       index = dsets.length;
-      
+
       dxmin = dsets[0].data[0][0];
       dxmax = dsets[0].data[dsets[0].data.length - 1][0];
     }
     dsets[index] = { color: 2, data: [[dxmin, tlev], [dxmax, tlev]], shadowSize: 1 };
-    
+
     return dsets;
   }
-  
+
   function runStop() {
     if(autorun) {
       $('#btn_single').prop('disabled', true);
@@ -2041,13 +2249,13 @@
       }
     }
   }
-  
+
   function singleUpdate() {
     if(! autorun) {
       sendParams(true, true, true);
     }
   }
-  
+
   function redrawPlot() {
     if(! downloading) {
       if(! plot) {
@@ -2056,56 +2264,56 @@
       else {
         var options = plot.getOptions();
         plot = $.plot(
-          plot.getPlaceholder(), 
+          plot.getPlaceholder(),
           filterData(datasets, plot.width()),
           $.extend(true, plot_options, {
             xaxis: { min: options.xaxes[0].min, max: options.xaxes[0].max },
             yaxis: { min: options.yaxes[0].min, max: options.yaxes[0].max }
           })
         );
-        updateTriggerSlider();        
+        updateTriggerSlider();
       }
     }
   }
-  
+
   function setVisibleChannels(btn) {
     var other_btn = $(btn.id == 'btn_ch1' ? '#btn_ch2' : '#btn_ch1');
     var btn = $(btn);
     var checked = !btn.data('checked');
-    
+
     btn.data('checked', checked).toggleClass('btn-default btn-primary');
-    
+
     // At least one button must be checked, so that at least one graph will be visible.
     if(! checked) {
       other_btn.data('checked', true).removeClass('btn-default').addClass('btn-primary');
     }
     redrawPlot();
   }
-  
+
   function autoscaleY() {
     if(! plot) {
       return;
     }
-    
+
     var options = plot.getOptions();
     var axes = plot.getAxes();
-    
+
     // Set Y scale to data min/max + 10%
-    options.yaxes[0].min = (axes.yaxis.datamin < 0 ? axes.yaxis.datamin * 1.1 : axes.yaxis.datamin - axes.yaxis.datamin * 0.1); 
+    options.yaxes[0].min = (axes.yaxis.datamin < 0 ? axes.yaxis.datamin * 1.1 : axes.yaxis.datamin - axes.yaxis.datamin * 0.1);
     options.yaxes[0].max = (axes.yaxis.datamax > 0 ? axes.yaxis.datamax * 1.1 : axes.yaxis.datamax + axes.yaxis.datamax * 0.1);
 
     plot.setupGrid();
     plot.draw();
-    
+
     updateRanges();
     updateTriggerSlider();
   }
-  
+
   function setAvgAtDec() {
     if(! plot) {
       return;
     }
-    
+
     $('#btn_avg').toggleClass('btn-default btn-primary');
 
     if($('#btn_avg').hasClass('btn-primary')) {
@@ -2122,29 +2330,29 @@
     if(! plot) {
       return;
     }
-    
+
     $('#btn_ch1, #btn_ch2').data('checked', true).removeClass('btn-default').addClass('btn-primary');
-    
+
     var ymax = params.original.gui_reset_y_range / 2;
     var ymin = ymax * -1;
-    
+
     $.extend(true, plot_options, {
       xaxis: { min: null, max: null },
       yaxis: { min: ymin, max: ymax }
     });
-         
+
     var options = plot.getOptions();
     options.xaxes[0].min = null;
     options.xaxes[0].max = null;
     options.yaxes[0].min = ymin;
     options.yaxes[0].max = ymax;
-    
+
     plot.setupGrid();
     plot.draw();
-    
+
     params.local.xmin = xmin;
     params.local.xmax = xmax;
-    
+
     sendParams(true, true);
   }
 
@@ -2152,28 +2360,28 @@
     if(! plot) {
       return;
     }
-    
+
     params.local.xmin = 0;
     params.local.xmax = time_range_max[params.local.time_range];
-  
+
     var axes = plot.getAxes();
     var options = plot.getOptions();
-    
+
     options.xaxes[0].min = params.local.xmin;
     options.xaxes[0].max = params.local.xmax;
     options.yaxes[0].min = axes.yaxis.min;
     options.yaxes[0].max = axes.yaxis.max;
-    
+
     plot.setupGrid();
     plot.draw();
 
     sendParams(true, true);
   }
-  
+
   function selectTool(toolname) {
     $('#selzoompan .btn').removeClass('btn-primary').addClass('btn-default');
     $(this).toggleClass('btn-default btn-primary');
-  
+
     if(toolname == 'zoomin') {
       enableZoomInSelection();
     }
@@ -2189,18 +2397,18 @@
     if(plot_options.hasOwnProperty('selection')) {
       return;
     }
-    
+
     var plot_pholder = plot.getPlaceholder();
 
     // Disable panning and zoom out
     delete plot_options.pan;
     plot_pholder.off('click.rp');
-    
+
     // Get current min/max for both axes to use them to fix the current view
     var axes = plot.getAxes();
-    
+
     plot = $.plot(
-      plot_pholder, 
+      plot_pholder,
       plot.getData(),
       $.extend(true, plot_options, {
         selection: { mode: 'xy' },
@@ -2209,28 +2417,28 @@
       })
     );
   }
-  
+
   function enableZoomOut() {
     var plot_pholder = plot.getPlaceholder();
-    
+
     plot_pholder.on('click.rp', function(event) {
       var offset = $(event.target).offset();
-      
+
       plot.zoomOut({
         center: { left: event.pageX - offset.left, top: event.pageY - offset.top },
         amount: 1.2
       });
     });
-    
+
     // Disable zoom in selection and panning
     delete plot_options.selection;
     delete plot_options.pan;
-    
+
     // Get current min/max for both axes to use them to fix the current view
     var axes = plot.getAxes();
-    
+
     plot = $.plot(
-      plot_pholder, 
+      plot_pholder,
       plot.getData(),
       $.extend(true, plot_options, {
         xaxis: { min: axes.xaxis.min, max: axes.xaxis.max },
@@ -2238,23 +2446,23 @@
       })
     );
   }
-  
+
   function enablePanning() {
     if(plot_options.hasOwnProperty('pan')) {
       return;
     }
-    
+
     var plot_pholder = plot.getPlaceholder();
-    
+
     // Disable selection zooming and zoom out
     delete plot_options.selection;
     plot_pholder.off('click.rp');
-    
+
     // Get current min/max for both axes to use them to fix the current view
     var axes = plot.getAxes();
-    
+
     plot = $.plot(
-      plot_pholder, 
+      plot_pholder,
       plot.getData(),
       $.extend(true, plot_options, {
         pan: { interactive: true },
@@ -2263,11 +2471,11 @@
       })
     );
   }
-  
+
   function mouseDownMove(that, evt) {
     var y;
     user_editing = true;
-    
+
     if(evt.type.indexOf('touch') > -1) {
       y = evt.originalEvent.touches[0].clientY - that.getBoundingClientRect().top - plot.getPlotOffset().top;
       touch_last_y = y;
@@ -2276,7 +2484,7 @@
       y = evt.clientY - that.getBoundingClientRect().top - plot.getPlotOffset().top;
     }
     updateTriggerSlider(y);
-    
+
     $('#trigger_tooltip').data('bs.tooltip').options.title = plot.getAxes().yaxis.c2p(y).toFixed(trigger_level_xdecimal_places);
     $('#trigger_tooltip').tooltip('show');
   }
@@ -2284,7 +2492,7 @@
   function mouseUpOut(evt) {
     if(trig_dragging) {
       trig_dragging = false;
-      
+
       var y;
       if(evt.type.indexOf('touch') > -1) {
         //y = evt.originalEvent.touches[0].clientY - this.getBoundingClientRect().top - plot.getPlotOffset().top;
@@ -2293,10 +2501,10 @@
       else {
         y = evt.clientY - this.getBoundingClientRect().top - plot.getPlotOffset().top;
       }
-      
+
       var scale = (params.local.trig_source == 0 ? params.local.scale_ch1 : params.local.scale_ch2);
-      params.local.trig_level = parseFloat(plot.getAxes().yaxis.c2p(y).toFixed(trigger_level_xdecimal_places)) / scale;           
-      
+      params.local.trig_level = parseFloat(plot.getAxes().yaxis.c2p(y).toFixed(trigger_level_xdecimal_places)) / scale;
+
       updateTriggerSlider();
       redrawPlot();
       sendParams();
@@ -2306,41 +2514,41 @@
     }
     $('#trigger_tooltip').tooltip('hide');
   }
-  
+
   function updateTriggerSlider(y, update_input) {
     if(! plot) {
       return;
     }
-    
+
     var canvas = $('#trigger_canvas')[0];
     var context = canvas.getContext('2d');
     var plot_offset = plot.getPlotOffset();
     var ymax = params.original.gui_reset_y_range / 2;
     var ymin = ymax * -1;
-    
+
     // Transform trigger level to real values
     // TODO: local or original params?
     var scale = (params.local.trig_source == 0 ? params.local.scale_ch1 : params.local.scale_ch2);
     var tlev = params.local.trig_level * scale;
 
     // If trigger level is outside the predefined ymin/ymax, change the level
-    
+
     if(tlev < ymin) {
       tlev = ymin;
     }
     else if(tlev > ymax) {
       tlev = ymax;
     }
-    
+
     if(y === undefined) {
       if(update_input !== false) {
         $('#trig_level').not(':focus').val(floatToLocalString(tlev));
       }
       y = plot.getAxes().yaxis.p2c(tlev);
     }
-    
+
     // If trigger source is External or mode is not Normal or trigger level is not in visible area, do not show the trigger slider and paint the vertical line with gray
-    context.clearRect(0, 0, canvas.width, canvas.height); 
+    context.clearRect(0, 0, canvas.width, canvas.height);
     var yaxis = plot.getAxes().yaxis;
     if(params.original.trig_mode != 1 || tlev < yaxis.min || tlev > yaxis.max || params.original.trig_source == 2) {
       context.lineWidth = 1;
@@ -2364,9 +2572,9 @@
       context.lineTo(10, canvas.height - plot_offset.bottom + 1);
       context.stroke();
     }
-    $('#trigger_tooltip').css({ top: y + plot_offset.top });  
+    $('#trigger_tooltip').css({ top: y + plot_offset.top });
   }
-  
+
   function updateRanges() {
     var xunit = (params.local.time_units == 0 ? 'μs' : (params.local.time_units == 1 ? 'ms' : 's'));
     var yunit = 'V';
@@ -2387,7 +2595,7 @@
       decimals = 1;
     }
     var seconds = (xunit == 'ns' ? 1e-9 : ( xunit == 'μs' ? 1e-6 : (xunit == 'ms' ? 1e-3 : 1)));
-    
+
     if(yrange < 1) {
       yunit = 'mV';
       yrange *= 1000;
@@ -2397,11 +2605,11 @@
 
     $('#range_x').html(+(Math.round(xrange + "e+" + decimals) + "e-" + decimals) + ' ' + xunit);
     $('#range_y').html(Math.floor(yrange) + ' ' + yunit);
-    
+
     var nearest_x = getNearestRanges(xrange);
     var nearest_y = getNearestRanges(yrange);
-        
-    // X limitations 
+
+    // X limitations
     if(nearest_x.next * seconds > xmaxrange) {
       nearest_x.next = null;
       $('#range_x_plus').prop('disabled', true);
@@ -2416,10 +2624,10 @@
     else {
       $('#range_x_minus').prop('disabled', false);
     }
-    
+
     $('#range_x_minus').data({ nearest: nearest_x.prev, unit: xunit }).data('bs.tooltip').options.title = nearest_x.prev;
     $('#range_x_plus').data({ nearest: nearest_x.next, unit: xunit }).data('bs.tooltip').options.title = nearest_x.next;
-    
+
     // Y limitations
     if(nearest_y.next - nearest_y.prev >= ymaxrange) {
       nearest_y.next = null;
@@ -2435,18 +2643,18 @@
     else {
       $('#range_y_minus').prop('disabled', false);
     }
-    
+
     $('#range_y_minus').data({ nearest: nearest_y.prev, unit: yunit }).data('bs.tooltip').options.title = nearest_y.prev;
     $('#range_y_plus').data({ nearest: nearest_y.next, unit: yunit }).data('bs.tooltip').options.title = nearest_y.next;
   }
-  
+
   function getNearestRanges(number) {
-    var log10 = Math.floor(Math.log(number) / Math.LN10); 
-    var normalized = number / Math.pow(10, log10);    
+    var log10 = Math.floor(Math.log(number) / Math.LN10);
+    var normalized = number / Math.pow(10, log10);
     var i = 0;
     var prev = null;
     var next = null;
-    
+
     while(i < range_steps.length - 1) {
       var ratio = range_steps[i+1] / normalized;
       if(ratio > 0.99 && ratio < 1.01) {
@@ -2462,17 +2670,17 @@
       i++;
     }
 
-    return { 
-      prev: prev * Math.pow(10, log10), 
-      next: next * Math.pow(10, log10) 
+    return {
+      prev: prev * Math.pow(10, log10),
+      next: next * Math.pow(10, log10)
     };
   }
-  
+
   function serverAutoScale() {
     params.local.auto_flag = 1;
     sendParams(true);
   }
-  
+
   function postGenSingle(channel) {
     if(params.local['gen_trig_mod_ch' + channel] == 1) {
       params.local['gen_single_ch' + channel] = 1;
@@ -2483,17 +2691,17 @@
     }
     return false;
   }
-  
+
   function showUploadForm(channel) {
     var file_elem = $('#uploaded_file');
     var fcontent_elem = $('#uploaded_file_content');
     var hint_elem = $('#upload_form .help-block');
-    
+
     fcontent_elem.val('');
     hint_elem.html('Select the CSV file to upload.');
     $('#upload_form')[0].reset();
     $('#modal_upload_label span').text(channel);
-    
+
     if(file_elem[0].files === undefined) {
       file_elem.hide().parent().addClass('has-error');
       hint_elem.html('Your browser is too old and do not support this feature.');
@@ -2503,7 +2711,7 @@
       file_elem.off('change').on('change', function() {
         var file = this.files[0];
         var freader = new FileReader();
-        
+
         // File validation
         //var size = file.size;
         var type = file.type;
@@ -2522,38 +2730,38 @@
         }
       });
     }
-    
+
     $('#modal_upload').modal('show');
-    
+
     return false;
   }
-  
+
   function startUpload() {
     var mbody = $('#modal_upload .modal-body');
     var file_elem = $('#uploaded_file');
     var hint_elem = $('#upload_form .help-block');
     var channel = $('#modal_upload_label span').text();
-    
+
     if(mbody.data('errtimer')) {
       clearTimeout(mbody.data('errtimer'));
       mbody.removeData('errtimer');
     }
-    
+
     if(! $('#uploaded_file').val().length) {
-      mbody.addClass('alert-danger').data('errtimer', setTimeout(function() { 
-        $('#modal_upload .modal-body').removeClass('alert-danger'); 
+      mbody.addClass('alert-danger').data('errtimer', setTimeout(function() {
+        $('#modal_upload .modal-body').removeClass('alert-danger');
       }, 1000));
       return;
     }
-    
+
     file_elem.hide();
     hint_elem.html('Uploading file...');
-    
+
     $.post(upload_url + channel, $('#uploaded_file_content').val(), function(dresult) {
       if($.type(dresult) == 'string' && dresult.trim() == 'OK') {
         $('#upload_form')[0].reset();
         $('#modal_upload').modal('hide');
-        
+
         user_editing = true;
         params.local.gen_awg_refresh = parseInt(channel);
         sendParams();
@@ -2570,22 +2778,22 @@
       file_elem.parent().addClass('has-error');
     });
   }
-  
+
   function getLocalDecimalSeparator() {
     var n = 1.1;
     return n.toLocaleString().substring(1,2);
   }
-  
+
   function parseLocalFloat(num) {
     return +(num.replace(getLocalDecimalSeparator(), '.'));
   }
-  
+
   function floatToLocalString(num) {
     // Workaround for a bug in Safari 6 (reference: https://github.com/mleibman/SlickGrid/pull/472)
     //return num.toString().replace('.', getLocalDecimalSeparator());
     return (num + '').replace('.', getLocalDecimalSeparator());
   }
-  
+
   function shortenFloat(value) {
     return value.toFixed(Math.abs(value) >= 10 ? 1 : 3);
   }
@@ -2593,7 +2801,7 @@
   function convertHz(value) {
     var unit = '';
     var decsep = getLocalDecimalSeparator();
-    
+
     if(value >= 1e6) {
       value /= 1e6;
       unit = '<span class="unit">MHz</span>';
@@ -2617,15 +2825,15 @@
     else {
       value = value.toFixed(3);
     }
-    
+
     value = (value == 0 ? '---' + decsep + '-' : floatToLocalString(value));
     return value + unit;
   }
-  
+
   function convertSec(value) {
     var unit = '';
     var decsep = getLocalDecimalSeparator();
-    
+
     if(value < 1e-6) {
       value *= 1e9;
       unit = '<span class="unit">ns</span>';
@@ -2653,134 +2861,268 @@
     else {
       value = value.toFixed(3);
     }
-    
+
     value = (value == 0 ? '---' + decsep + '-' : floatToLocalString(value));
     return value + unit;
   }
-  
+
   // LOLO add-ons
-  
-  
-  
-  /*
-    
-  pn=['xmin', 'xmax', 'trig_mode', 'trig_source', 'trig_edge', 'trig_delay', 'trig_level', 'single_btn', 
-      'time_range', 'time_units', 'en_avg_at_dec', 'auto_flag', 'min_y', 'max_y', 'forcex_flag', 'meas_min_ch1', 
-      'meas_max_ch1', 'meas_amp_ch1', 'meas_avg_ch1', 'meas_freq_ch1', 'meas_per_ch1', 'meas_min_ch2', 
-      'meas_max_ch2', 'meas_amp_ch2', 'meas_avg_ch2', 'meas_freq_ch2', 'meas_per_ch2', 'prb_att_ch1', 'gain_ch1', 
-      'prb_att_ch2', 'gain_ch2', 'gui_reset_y_range', 'gen_DC_offs_1', 'gen_DC_offs_2', 'gui_xmin', 'gui_xmax', 
-      'min_y_norm', 'max_y_norm', 'gen_DC_norm_1', 'gen_DC_norm_2', 'scale_ch1', 'scale_ch2', 'gen_trig_mod_ch1', 
-      'gen_sig_type_ch1', 'gen_enable_ch1', 'gen_single_ch1', 'gen_sig_amp_ch1', 'gen_sig_freq_ch1', 'gen_sig_dcoff_ch1', 
-      'gen_trig_mod_ch2', 'gen_sig_type_ch2', 'gen_enable_ch2', 'gen_single_ch2', 'gen_sig_amp_ch2', 'gen_sig_freq_ch2', 
-      'gen_sig_dcoff_ch2', 'gen_awg_refresh', 'pid_11_enable', 'pid_11_rst', 'pid_11_sp', 'pid_11_kp', 'pid_11_ki', 'pid_11_kd', 
-      'pid_12_enable', 'pid_12_rst', 'pid_12_sp', 'pid_12_kp', 'pid_12_ki', 'pid_12_kd', 'pid_21_enable', 'pid_21_rst', 'pid_21_sp', 
-      'pid_21_kp', 'pid_21_ki', 'pid_21_kd', 'pid_22_enable', 'pid_22_rst', 'pid_22_sp', 'pid_22_kp', 'pid_22_ki', 'pid_22_kd']
 
-  for ( var x in pn) { console.log( pn[x] ) }
-
-  for ( var x in pn) {
-    if ( $('#'+pn[x]).size()==1 )
-      console.log( ""+pn[x]+": "+ $('#'+pn[x])[0].type ) ;
-  }
-
-
-  function wait_next(){
-    var timeouttime=1000;
-    var starttime = new Date().getTime();
-    var lastSendParamsCount = sendParamsCount;
-    sendParams(true);
-    while (sendParamsCount==lastSendParamsCount) {
-      if ((new Date().getTime() - starttime) > timeouttime){
-        break;
-      }
+  function config_save_storage(name){
+    // check support and if there are saved configs
+    if (typeof(Storage) == "undefined") {
+        console.log("config_save_storage: No HTML5 Local storage");
+        return -1;
     }
-    return
-  }
 
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  async function demo() {
-    console.log('Taking a break...');
-    await sleep(2000);
-    console.log('Two second later');
-  }
-    
-
-  function wait(seg) {
-    if(seg>1){
-      seg=Math.round(seg);
-      while(seg>0){
-        console.log(seg);
-        seg--;
-        sleep(1000)
-      }
+    // If thera are saved configs, load. If not, create empty container
+    if ( localStorage.scopePlusConfig ){
+      params.storage=JSON.parse(localStorage.scopePlusConfig);
     } else {
-      sleep(1000*Math.round(seg))
+      params.storage=[];
     }
-    return
-  }
 
-  function rp_set(param,val){
-    params.local[param]=val;
-    //sendParams(true);
-    wait_next()
-  }
-
-  function rp_get(param){
-    return params.local[param];
-  }
-
-
-  async function demo() {
-    var amplitude1=[];
-    var amplitude2=[];
-    var amplitude_ratio=[];
-    rp_set('gen_sig_amp_ch1', 0.3)
-    await sleep(300);
-    rp_set('gen_sig_freq_ch1', 200);
-    await sleep(300);
-    rp_set('gen_enable_ch1', 1)
-    await sleep(300);
-
-    $('#btn_auto').click();
-    await sleep(2000);
-    
-    rp_get('time_range');
-
-    await sleep(3000);
-
-    freqs=[200,430,928,2000,4300,9200,20000,43000,93000,200000];
-
-    for(var i in freqs){
-      rp_set('gen_sig_freq_ch1', freqs[i]);
-      await sleep(300);
-      console.log('frecuencia '+ freqs[i] + ' Hz' );
-      
-      if(i%4 == 3) { 
-        $('#btn_auto').click();
-        await sleep(1000);
-        console.log('Resize')
+    // check if name is repeated
+    for(i in params.storage){
+      if(name==params.storage[i].name) {
+        console.log('config_save_storage: Storage name repeated - ' + params.storage[i].name ) ;
+        alert("Error: Storage name repeated");
+        return -1;
       }
-      await sleep(3000);
-      amplitude1[i]      = params.local.meas_amp_ch1;
-      amplitude2[i]      = params.local.meas_amp_ch2;
-      amplitude_ratio[i] = amplitude2[i]/amplitude1[i];
-      console.log('amplitud Vpp Ch1: '+ amplitude1[i] + ' V   |   Vpp Ch2: ' + amplitude2[i] + ' V   |   Ratio: amplitude_ratio[i]' + amplitude_ratio[i] );
-      console.log('  ')
-      await sleep(300);
     }
-    
-    console.log(amplitude1);
+
+    // create new element
+    var tmp_storage_elem = {'name':name , 'datetime':new Date().toJSON(), 'data':{} };
+    for(i in config_params_keys){
+      if(params.local[ config_params_keys[i] ]!= null )
+        tmp_storage_elem.data[ config_params_keys[i] ] = params.local[ config_params_keys[i] ];
+    }
+
+    // store element in params storage
+    params.storage.push(tmp_storage_elem);
+
+    // update storage key
+    localStorage.scopePlusConfig=JSON.stringify(params.storage);
+
+  }
+
+  function config_load_storage(name){
+    // check support
+    if (typeof(Storage) == "undefined") {
+      console.log("config_load_storage: No HTML5 Local storage");
+      return -1;
+    }
+
+    // If there are saved configs, load. If not, create empty container
+    if ( localStorage.scopePlusConfig ){
+      params.storage=JSON.parse(localStorage.scopePlusConfig);
+    } else {
+      params.storage=[];
+      console.log("config_load_storage: No data saved in storage");
+      return -1;
+    }
+
+
+    // check if name / num exist
+    var num=-1;
+    if(typeof(name)=="number") { // if it is a number ...
+      if(name<params.storage.length) num=name;
+    } else if (typeof(name)=="string"){ // if it is a string
+      num = params.storage.findIndex( function (obj){ return obj.name == name  } ) ;
+    }
+
+    if(num<0) {
+      console.log("config_load_storage: Saved name/num not found");
+      return -1 ;
+    }
+
+    // Load actual data to skip loadParams errors
+    meas_keys="meas_min_ch1,meas_max_ch1,meas_amp_ch1,meas_avg_ch1,meas_freq_ch1,meas_per_ch1,meas_min_ch2,meas_max_ch2,meas_amp_ch2,meas_avg_ch2,meas_freq_ch2,meas_per_ch2".split(",");
+    for(i in meas_keys){
+      params.storage[num].data[ meas_keys[i] ] = params.local[ meas_keys[i] ]
+    }
+
+    user_editing = true;
+    //sending = true;
+
+    // load into params
+    loadParams(params.storage[num].data);
+
+    // update params to server
+    sendParams(true, true);
+
+  }
+
+  function config_del_storage(name){
+    // check support
+    if (typeof(Storage) == "undefined") {
+      console.log("config_del_storage: No HTML5 Local storage");
+      return -1;
+    }
+
+    // If there are saved configs, load. If not, create empty container
+    if ( localStorage.scopePlusConfig ){
+      params.storage=JSON.parse(localStorage.scopePlusConfig);
+    } else {
+      params.storage=[];
+      console.log("config_del_storage: No data saved in storage");
+      return -1;
+    }
+
+
+    // check if name / num exist
+    var num=-1;
+    if(typeof(name)=="number") { // if it is a number ...
+      if(name<params.storage.length) num=name;
+    } else if (typeof(name)=="string"){ // if it is a string
+      num = params.storage.findIndex( function (obj){ return obj.name == name  } ) ;
+    }
+
+    if(num<0) {
+      console.log("config_load_storage: Saved name/num not found");
+      return -1 ;
+    }
+
+
+    // del config from params.storage
+    params.storage.splice(num, 1);
+
+    // update storage key
+    localStorage.scopePlusConfig=JSON.stringify(params.storage);
   }
 
 
-    
-  */
-  
+  function config_show_storage(){
+    // check support
+    if (typeof(Storage) == "undefined") {
+      console.log("config_load_storage: No HTML5 Local storage");
+      return -1;
+    }
+
+    // If there are saved configs, load. If not, create empty container
+    if ( localStorage.scopePlusConfig ){
+      params.storage=JSON.parse(localStorage.scopePlusConfig);
+    } else {
+      params.storage=[];
+      console.log("config_load_storage: No data saved in storage");
+      return -1;
+    }
+
+    var txt='<table class="table text-left">';
+    txt += '<thead><tr><th>Number</th><th>Name</th><th>DateTime</th><th colspan="3">Actions</th></tr></thead>';
+    txt += '<tbody>';
+    for(i in params.storage){
+      txt += '<tr>';
+      txt += '<td>' + $("<div />").text( i ).html() + '</td>';
+      txt += '<td>' + $("<div />").text( params.storage[i].name ).html().replace('_','_<wbr>') + '</td>';
+      txt += '<td>' +  pretty_now(params.storage[i].datetime).replace(' ','<br>')  + '</td>';
+      txt += '<td>' + '<button onclick="config_del_storage('+i+');config_show_storage();" class="btn btn-primary btn-sm"  >del  </button>' + '</td>';
+      txt += '<td>' + '<a id="btn_save_config_file_'+i+'" class="btn btn-primary btn-sm" >download</a>' + '</td>';
+      txt += '<td>' + '<button onclick="config_load_storage('+i+'); $(\'#btn_close_config\').click();" class="btn btn-primary btn-sm" >load</button>' + '</td>';
+      txt += '</tr>';
+    }
+    txt += '</tbody></table>';
+
+    $("#config_storage_table").html(txt);
+    var save_text = "";
+    for(i in params.storage){
+      save_text = JSON.stringify(params.storage[i]);
+      $('#btn_save_config_file_'+i)[0].download = params.storage[i].name + ".json";
+      $('#btn_save_config_file_'+i)[0].href     = "data:text/text;charset=utf-8," + encodeURIComponent(save_text);
+    }
+  }
+
+
+  function config_save_file(){
+    // Save name
+    var name = $("#config_name_input").val();
+    var filename_config = name + ".json";
+
+    // create new element
+    var tmp_storage_elem = {'name':name , 'datetime':new Date().toJSON(), 'data':{} };
+    for(i in config_params_keys){
+      if(params.local[ config_params_keys[i] ]!= null )
+        tmp_storage_elem.data[ config_params_keys[i] ] = params.local[ config_params_keys[i] ];
+    }
+
+    var save_text = JSON.stringify(tmp_storage_elem);
+    $('#btn_config_save_file')[0].download = filename_config;
+    $('#btn_config_save_file')[0].href     = "data:text/text;charset=utf-8," + encodeURIComponent(save_text);
+
+  }
+
+  function config_load_file(evt){
+    var files = evt.target.files[0]; // FileList object
+
+    var reader = new FileReader();
+
+    reader.onload = function(e) {
+      var text = reader.result;
+
+
+      // If thera are saved configs, load. If not, create empty container
+      if ( localStorage.scopePlusConfig ){
+        params.storage=JSON.parse(localStorage.scopePlusConfig);
+      } else {
+        params.storage=[];
+      }
+
+      // create new element
+      var tmp_storage_elem = JSON.parse(text);
+
+      // check if name is repeated
+      for(i in params.storage){
+        if(tmp_storage_elem.name==params.storage[i].name) {
+          console.log('config_save_storage: Storage name repeated - ' + params.storage[i].name ) ;
+          return -1;
+        }
+      }
+
+      // store element in params storage
+      params.storage.push(tmp_storage_elem);
+
+      // update storage key
+      localStorage.scopePlusConfig=JSON.stringify(params.storage);
+
+      // update config table
+      config_show_storage();
+
+    }
+
+    reader.readAsText(files);
+
+  }
+
+  function now(dd){
+    var dd = dd || new Date().toJSON() ;
+    var date = new Date(dd);
+    var date_str= ('0'+date.getFullYear()).substr(-4,4)+
+                  ('0'+date.getMonth()+1 ).substr(-2,2)+
+                  ('0'+date.getDate()    ).substr(-2,2)+
+                  '_'+
+                  ('0'+date.getHours()   ).substr(-2,2)+
+                  ('0'+date.getMinutes() ).substr(-2,2)+
+                  ('0'+date.getSeconds() ).substr(-2,2) ;
+    return date_str;
+  }
+
+  function pretty_now(dd){
+    var dd = dd || new Date().toJSON() ;
+    var date = new Date(dd);
+    var date_str= ('0'+date.getFullYear()).substr(-4,4)+'-'+
+                  ('0'+date.getMonth()+1 ).substr(-2,2)+'-'+
+                  ('0'+date.getDate()    ).substr(-2,2)+
+                  ' '+
+                  ('0'+date.getHours()   ).substr(-2,2)+':'+
+                  ('0'+date.getMinutes() ).substr(-2,2)+':'+
+                  ('0'+date.getSeconds() ).substr(-2,2) ;
+    return date_str;
+  }
+
+
+
   // END LOLO
-  
+
   </script>
   <script src="../assets/redpitaya.custom.js"></script>
 </head>
@@ -2800,7 +3142,7 @@
         </button>
         <button class="btn btn-primary btn-lg" onclick="resetZoom()">
           <span class="glyphicon glyphicon-retweet"></span> Reset zoom
-        </button>  
+        </button>
         <div id="selzoompan" class="btn-group" data-toggle="buttons">
           <button id="btn_zoomin" class="btn btn-primary" onclick="selectTool.call(this, 'zoomin')" style="display: none">
             <span class="glyphicon glyphicon-zoom-in"></span>
@@ -2819,6 +3161,8 @@
         <button id="btn_ch2" class="btn btn-primary btn-lg" data-checked="true" onclick="setVisibleChannels(this)">Channel 2</button>
         <button id="btn_stop" class="btn btn-primary btn-lg" >Stop</button>
         <button id="btn_save" class="btn btn-primary btn-lg" onclick="showModalSave();">Save Data</button>
+        <button id="btn_save" class="btn btn-primary btn-lg" onclick="showModalConfig();">Config</button>
+        <button id="raw_mode" class="btn btn-default btn-lg" data-checked="false">Raw&nbsp;Mode</button>
         <button id="btn_auto" class="btn btn-primary btn-lg" onclick="serverAutoScale()">AUTO</button>
         <button id="btn_avg" class="btn btn-default btn-lg" onclick="setAvgAtDec()">Averaging</button>
       </div>
@@ -2834,34 +3178,7 @@
           <div id="plot_holder"></div>
           <div id="xtitle"></div>
         </div>
-      
-        <div id="lolo">
-        
-          <h3>Try This</h3> 
-          <form> 
-          <textarea id="yourcode" cols="40" rows="10">
-import RP
 
-print RP.fact(5)
-
-import turtle
-t = turtle.Turtle()
-
-for i in range(10):
-  t.forward(100/(i+1))
-  t.left(90)
-
-print "Hello World" 
-          </textarea><br /> 
-          <button type="button" id="pyrun" onclick="runit()">Run</button> 
-          </form> 
-          <pre id="output" ></pre> 
-          <!-- If you want turtle graphics include a canvas -->
-          <div id="mycanvas"></div> 
-        
-        </div>
-        
-        
       </div>
       <div class="panel-group col-xs-12 col-sm-12 col-md-4" id="accordion">
         <div class="panel panel-default">
@@ -3282,7 +3599,7 @@ print "Hello World"
             </div>
           </div>
         </div>
-        
+
         <div class="panel panel-default">
           <div class="panel-heading">
             <h4 class="panel-title">
@@ -3544,7 +3861,7 @@ print "Hello World"
             </div>
           </div>
         </div>
-        
+
       </div>
     </div>
     <div class="footer clearfix">
@@ -3566,7 +3883,21 @@ print "Hello World"
       </div>
     </div>
   </div>
-  
+
+  <div id="modal_help" class="modal" tabindex="-1" role="dialog" aria-labelledby="modal_help_label" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal_help_label">Application HELP</h4>
+        </div>
+        <div class="modal-body"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-close-modal" id="btn_close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="modal_save" class="modal" tabindex="-1" role="dialog" aria-labelledby="modal_save_label" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -3653,7 +3984,73 @@ print "Hello World"
       </div>
     </div>
   </div>
-  
+
+
+  <div id="modal_config" class="modal" tabindex="-1" role="dialog" aria-labelledby="modal_config_label" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+
+        <div class="modal-header">
+          <h4 class="modal-title" id="modal_config_label">Configuration</h4>
+        </div>
+
+        <div class="modal-body">
+          <div class="panel-group col-xs-12 col-sm-12 col-md-12">
+
+            <div class="row">
+              <form class="form-horizontal" role="form" onsubmit="return false;">
+                <div class="form-group">
+                  <div class="panel-group col-xs-12 col-sm-4 col-md-4">
+                    <label for="config_name_input" class="col-xs-4 control-label">Config&nbsp;Name:</label>
+                  </div>
+                  <div class="panel-group col-xs-12 col-sm-8 col-md-8">
+                    <input type="text" autocomplete="off" class="form-control" value=" " id="config_name_input">
+                  </div>
+                </div>
+              </form>
+            </div> <!-- row end -->
+
+            <hr>
+
+            <div class="row">
+              <div class="panel-group col-xs-12 col-sm-6 col-md-6 text-center">
+                <button id="btn_config_save_browser" class="btn btn-primary btn-lg" onclick="config_save_storage( $('#config_name_input').val() );config_show_storage();" >Save in browser</button>
+              </div>
+              <div class="panel-group col-xs-12 col-sm-6 col-md-6 text-center">
+                <a id="btn_config_save_file" class="btn btn-primary btn-lg" >Save as file</a>
+              </div>
+            </div> <!-- row end -->
+            <br>
+            <div class="row">
+              <div class="panel-group col-xs-12 col-sm-4 col-md-4 text-center">
+                <label for="btn_config_load_file" class="col-xs-4 control-label">Load&nbsp;file:</label>
+              </div>
+              <div class="panel-group col-xs-12 col-sm-8 col-md-8 text-center">
+                <input id="btn_config_load_file" type="file"  name="files[]" class="btn btn-primary btn-lg" >
+              </div>
+            </div> <!-- row end -->
+            <hr>
+
+            <div class="row">
+              <div id="config_storage_table" class="panel-group col-xs-12 col-sm-12 col-md-12 text-center">
+                <p>container</p>
+              </div>
+            </div> <!-- row end -->
+
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default btn-close-modal" id="btn_close_config">Close</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+
   <div id="modal_app" class="modal" tabindex="-1" role="dialog" aria-labelledby="modal_app_label" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -3678,7 +4075,7 @@ print "Hello World"
         <div class="modal-header">
           <h4 class="modal-title" id="modal_upload_label">File upload for channel <span></span></h4>
         </div>
-        <div class="modal-body"> 
+        <div class="modal-body">
           <form id="upload_form" role="form">
             <div class="form-group">
               <input type="file" name="file_select" id="uploaded_file">
@@ -3693,6 +4090,6 @@ print "Hello World"
         </div>
       </div>
     </div>
-  </div>  
+  </div>
 </body>
 </html>
