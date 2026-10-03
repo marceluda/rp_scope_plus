@@ -616,6 +616,7 @@ int rp_set_params(rp_app_params_t *p, int len)
     int params_change = 0;
     int awg_params_change = 0;
     int pid_params_change = 0;
+    int got_xmin = 0, got_xmax = 0;
 
     TRACE("%s()\n", __FUNCTION__);
 
@@ -651,6 +652,9 @@ int rp_set_params(rp_app_params_t *p, int len)
         if(rp_main_params[p_idx].read_only)
             continue;
 
+        if(p_idx == MIN_GUI_PARAM) got_xmin = 1;
+        if(p_idx == MAX_GUI_PARAM) got_xmax = 1;
+
         if(rp_main_params[p_idx].value != p[i].value) {
             if(p_idx < PARAMS_AWG_PARAMS)
                 params_change = 1;
@@ -681,8 +685,17 @@ int rp_set_params(rp_app_params_t *p, int len)
 
         pthread_mutex_lock(&rp_main_params_mutex);
         /* Xmin & Xmax public copy to be served to clients */
-        rp_main_params[GUI_XMIN].value = p[MIN_GUI_PARAM].value;
-        rp_main_params[GUI_XMAX].value = p[MAX_GUI_PARAM].value;
+        /* p may be a partial list (split POSTs): use the values already copied by name in the loop above.
+         * xmin/xmax not in this POST: after the previous rp_set_params() the MIN/MAX_GUI_PARAM slots hold
+         * the worker window in seconds (see "write back" below), not GUI units, and transform_acq_params()
+         * would read them as [time_units] (e.g. 131 us -> 0.000131072 us after a restore without xmin/xmax).
+         * Use the last GUI values instead (GUI_XMIN/GUI_XMAX, in the current TIME_UNIT_PARAM). */
+        if(!got_xmin)
+            rp_main_params[MIN_GUI_PARAM].value = rp_main_params[GUI_XMIN].value;
+        if(!got_xmax)
+            rp_main_params[MAX_GUI_PARAM].value = rp_main_params[GUI_XMAX].value;
+        rp_main_params[GUI_XMIN].value = rp_main_params[MIN_GUI_PARAM].value;
+        rp_main_params[GUI_XMAX].value = rp_main_params[MAX_GUI_PARAM].value;
         transform_acq_params(rp_main_params);
         pthread_mutex_unlock(&rp_main_params_mutex);
 

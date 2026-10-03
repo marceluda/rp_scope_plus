@@ -10,6 +10,10 @@ scope++/target_dbg/
 scope++/target_rld/
 scope++/fpga/out/
 scope++/.srcs/
+# build outputs: packages (archive/*.zip|tar.gz) and the target folders. The two old zips in archive/
+# (scope++-1.1.0-0/3-devbuild.zip) were committed before this rule: they stay versioned.
+archive/
+target*/
 
 
 # Prerequisites

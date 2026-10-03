@@ -329,7 +329,14 @@ int osc_fpga_arm_trigger(void)
  */
 int osc_fpga_set_trigger(uint32_t trig_source)
 {
-    g_osc_fpga_reg_mem->trig_source = trig_source;
+    /* Ecosystem 2.0 (v0.94 bitstream): every trigger locks the trigger logic
+     * (trig_source bit 4) until 1 is written to 0x94; the source has to be
+     * written after the unlock (same order as librp acq_Start() followed by
+     * acq_SetTriggerSrc()). In 0.9x bitstreams 0x94 is unmapped: the write is
+     * acknowledged and ignored. */
+    volatile osc_fpga_reg_mem_t *reg = g_osc_fpga_reg_mem;
+    reg->trigger_lock_ctr = 1;
+    reg->trig_source = trig_source;
     return 0;
 }
 
@@ -350,14 +357,33 @@ int osc_fpga_set_trigger_delay(uint32_t trig_delay)
 
 /*----------------------------------------------------------------------------*/
 /**
- * @brief Determine the "Trigger mode" the system is running in
+ * @brief Determine whether the armed acquisition has finished (trigger
+ * received and post-trigger delay elapsed).
  *
- * @retval 0 The system is not running in the trigger mode
- * @retval 1 The system is running in the trigger mode
+ * Works with both FPGA generations:
+ *  - 2.0 (v0.94): conf bit 4 (adc_dly_end) is set when the post-trigger delay
+ *    is over and stays set until the next arm/reset. The trigger source
+ *    already returns to 0 when the trigger arrives (before the delay ends),
+ *    while conf bit 2 (adc_trg_rd) stays 1 until the next arm, so the second
+ *    test below never fires early.
+ *  - 0.9x: conf bit 4 does not exist (reads 0); the trigger source returns to 0
+ *    when the delay is over, and conf bit 2 (adc_dly_do) is 0 again by then.
+ *
+ * @retval 0 Acquisition still running (waiting for trigger or for the delay)
+ * @retval 1 Acquisition finished
  */
 int osc_fpga_triggered(void)
 {
-    return ((g_osc_fpga_reg_mem->trig_source & OSC_FPGA_TRIG_SRC_MASK)==0);
+    /* Read the source first: if it already reads 0, the trigger happened
+     * before conf is read, so in 2.0 conf bit 2 is guaranteed to be set. */
+    volatile osc_fpga_reg_mem_t *reg = g_osc_fpga_reg_mem;
+    uint32_t src  = reg->trig_source;
+    uint32_t conf = reg->conf;
+
+    if(conf & OSC_FPGA_CONF_ACQ_DONE_BIT)
+        return 1;
+    return (((src & OSC_FPGA_TRIG_SRC_RD_MASK) == 0) &&
+            !(conf & OSC_FPGA_CONF_TRIG_ST_BIT));
 }
 
 
